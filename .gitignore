@@ -1,0 +1,70 @@
+# Claude Flow v2.0.0 Alpha - Windows 11 Environment
+# Generated files and runtime data that should not be tracked
+
+# SQLite Databases (runtime generated)
+.hive-mind/
+.swarm/
+.ruv-swarm/
+
+# Temporary files
+*.tmp
+*.temp
+create_swarm_db.js
+
+# Installation files
+vs_buildtools.exe
+*.exe
+*.msi
+
+# Node.js dependencies (if any local installations)
+node_modules/
+
+# Runtime logs
+*.log
+logs/
+
+# Claude Code runtime files
+.claude/logs/
+.claude/cache/
+
+# Memory store files (runtime generated)
+memory/claude-flow-data.json
+memory/memory-store.json
+
+# Session files (runtime generated)
+memory/sessions/*.json
+coordination/*/session-*.json
+
+# Neural training results (runtime generated)
+*.json
+!windows-config.json
+!package.json
+!**/README.json
+
+# Windows specific
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# Git Bash specific
+.bash_history
+.bashrc.local
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
