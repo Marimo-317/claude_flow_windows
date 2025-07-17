@@ -1,0 +1,116 @@
+{
+  "platform": "Windows 11",
+  "architecture": "x64",
+  "shell": "Git Bash",
+  "node_version": "v24.4.1",
+  "npm_version": "11.4.2",
+  "claude_flow_version": "2.0.0-alpha.60",
+  "ruv_swarm_version": "1.0.18",
+  
+  "paths": {
+    "node_executable": "node",
+    "npm_executable": "npm",
+    "claude_flow_path": "C:\\Users\\shiro\\AppData\\Roaming\\npm\\node_modules\\claude-flow\\src\\cli\\simple-cli.js",
+    "ruv_swarm_path": "C:\\Users\\shiro\\AppData\\Roaming\\npm\\node_modules\\ruv-swarm",
+    "working_directory": "C:\\Users\\shiro\\claude_flow_windows"
+  },
+  
+  "directories": {
+    "hive_mind": ".hive-mind",
+    "swarm": ".swarm",
+    "memory": "memory",
+    "coordination": "coordination",
+    "claude_config": ".claude",
+    "neural_results": ".ruv-swarm/neural"
+  },
+  
+  "databases": {
+    "hive_db": ".hive-mind/hive.db",
+    "memory_db": ".hive-mind/memory.db",
+    "swarm_memory": ".swarm/memory.db",
+    "persistence": "memory/claude-flow-data.json"
+  },
+  
+  "wrappers": {
+    "bash_script": "claude-flow.sh",
+    "batch_script": "claude-flow.cmd",
+    "usage": "./claude-flow.sh [command] [options]"
+  },
+  
+  "mcp_servers": {
+    "claude_flow": {
+      "command": "npx claude-flow@alpha mcp start",
+      "description": "Claude Flow MCP server with swarm orchestration",
+      "status": "configured"
+    },
+    "ruv_swarm": {
+      "command": "npx ruv-swarm mcp start",
+      "description": "ruv-swarm MCP server for enhanced coordination",
+      "status": "configured"
+    }
+  },
+  
+  "tools_available": {
+    "swarm_coordination": 12,
+    "neural_networks": 15,
+    "memory_persistence": 12,
+    "analysis_monitoring": 13,
+    "workflow_automation": 11,
+    "github_integration": 8,
+    "dynamic_agents": 8,
+    "system_utilities": 8,
+    "total": 87
+  },
+  
+  "features_enabled": {
+    "hive_mind_intelligence": true,
+    "neural_training": true,
+    "wasm_acceleration": true,
+    "sqlite_memory": true,
+    "github_integration": true,
+    "mcp_tools": true,
+    "cross_session_persistence": true,
+    "auto_save": true,
+    "collective_memory": true,
+    "consensus_decisions": true
+  },
+  
+  "performance_optimizations": {
+    "concurrency_decreased": 15,
+    "auto_save_interval": 30,
+    "memory_compression": true,
+    "sqlite_optimization": true,
+    "wasm_simd": true,
+    "parallel_execution": true
+  },
+  
+  "quick_start_commands": [
+    "./claude-flow.sh --version",
+    "./claude-flow.sh status",
+    "./claude-flow.sh hive-mind wizard",
+    "./claude-flow.sh hive-mind spawn \"your objective\"",
+    "./claude-flow.sh memory store \"key\" \"value\"",
+    "./claude-flow.sh memory query \"search-term\"",
+    "./claude-flow.sh training neural-train --data recent",
+    "./claude-flow.sh github repo-architect \"analyze structure\"",
+    "./claude-flow.sh mcp tools --verbose"
+  ],
+  
+  "installation_notes": [
+    "Installed with --ignore-scripts flag to bypass native compilation",
+    "better-sqlite3 bindings manually configured",
+    "Python 3.11.9 and VS Build Tools installed for native modules",
+    "Command wrappers created for simplified execution",
+    "All databases initialized and functioning",
+    "Neural training with WASM acceleration verified",
+    "87 MCP tools available and tested"
+  ],
+  
+  "troubleshooting": {
+    "long_commands": "Use ./claude-flow.sh wrapper for simplified execution",
+    "timeouts": "Performance optimized, auto-tuned concurrency",
+    "sqlite_errors": "Bindings manually configured and verified",
+    "mcp_issues": "Both claude-flow and ruv-swarm servers configured",
+    "path_issues": "Windows path handling implemented throughout"
+  }
+}
