@@ -6,9 +6,42 @@ const fs = require('fs-extra');
 
 class IssueAnalyzer {
     constructor() {
-        this.db = new Database('.hive-mind/automation.db');
+        // Try SQLite, fallback to JSON storage
+        try {
+            this.db = new Database('.hive-mind/automation.db');
+            this.storageType = 'sqlite';
+        } catch (error) {
+            console.log('SQLite not available in IssueAnalyzer, using JSON fallback');
+            this.db = null;
+            this.storageType = 'json';
+            this.jsonDbPath = '.hive-mind/issue-analyzer.json';
+            this.ensureJsonDb();
+        }
         this.logger = this.setupLogger();
         this.initializeAnalyzer();
+    }
+
+    ensureJsonDb() {
+        if (!fs.existsSync(this.jsonDbPath)) {
+            const defaultDb = {
+                issue_analyses: [],
+                learning_patterns: [],
+                metrics: {
+                    totalAnalyses: 0,
+                    averageComplexity: 0,
+                    categoryDistribution: {}
+                }
+            };
+            fs.writeJsonSync(this.jsonDbPath, defaultDb, { spaces: 2 });
+        }
+    }
+
+    readJsonDb() {
+        return fs.readJsonSync(this.jsonDbPath);
+    }
+
+    writeJsonDb(data) {
+        fs.writeJsonSync(this.jsonDbPath, data, { spaces: 2 });
     }
 
     setupLogger() {
@@ -390,58 +423,110 @@ class IssueAnalyzer {
     }
 
     async storeAnalysis(analysis) {
-        const insertAnalysis = this.db.prepare(`
-            INSERT OR REPLACE INTO issues (
-                github_id, number, title, body, labels, complexity_score, 
-                estimated_duration, language_detected, framework_detected, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
+        if (this.storageType === 'sqlite') {
+            const insertAnalysis = this.db.prepare(`
+                INSERT OR REPLACE INTO issues (
+                    github_id, number, title, body, labels, complexity_score, 
+                    estimated_duration, language_detected, framework_detected, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
 
-        const complexityScore = { low: 1, medium: 2, high: 3 }[analysis.complexity];
+            const complexityScore = { low: 1, medium: 2, high: 3 }[analysis.complexity];
 
-        insertAnalysis.run(
-            analysis.issue_id,
-            analysis.number,
-            analysis.title,
-            analysis.body,
-            JSON.stringify(analysis.labels),
-            complexityScore,
-            analysis.estimatedDuration,
-            JSON.stringify(analysis.languages),
-            JSON.stringify(analysis.frameworks),
-            new Date().toISOString()
-        );
+            insertAnalysis.run(
+                analysis.issue_id,
+                analysis.number,
+                analysis.title,
+                analysis.body,
+                JSON.stringify(analysis.labels),
+                complexityScore,
+                analysis.estimatedDuration,
+                JSON.stringify(analysis.languages),
+                JSON.stringify(analysis.frameworks),
+                new Date().toISOString()
+            );
+        } else {
+            // JSON fallback
+            const data = this.readJsonDb();
+            const complexityScore = { low: 1, medium: 2, high: 3 }[analysis.complexity];
+            
+            const analysisRecord = {
+                github_id: analysis.issue_id,
+                number: analysis.number,
+                title: analysis.title,
+                body: analysis.body,
+                labels: analysis.labels,
+                complexity_score: complexityScore,
+                estimated_duration: analysis.estimatedDuration,
+                language_detected: analysis.languages,
+                framework_detected: analysis.frameworks,
+                created_at: new Date().toISOString()
+            };
+            
+            data.issue_analyses.push(analysisRecord);
+            this.writeJsonDb(data);
+        }
     }
 
     async updateLearningPatterns(analysis) {
-        // Store pattern for future learning
-        const insertPattern = this.db.prepare(`
-            INSERT OR REPLACE INTO learning_patterns (
-                pattern_type, pattern_data, confidence_score, 
-                issue_characteristics, solution_approach
-            ) VALUES (?, ?, ?, ?, ?)
-        `);
+        if (this.storageType === 'sqlite') {
+            // Store pattern for future learning
+            const insertPattern = this.db.prepare(`
+                INSERT OR REPLACE INTO learning_patterns (
+                    pattern_type, pattern_data, confidence_score, 
+                    issue_characteristics, solution_approach
+                ) VALUES (?, ?, ?, ?, ?)
+            `);
 
-        insertPattern.run(
-            'issue_analysis',
-            JSON.stringify({
-                complexity: analysis.complexity,
-                category: analysis.category,
-                languages: analysis.languages,
-                frameworks: analysis.frameworks
-            }),
-            analysis.confidence / 100,
-            JSON.stringify({
-                title: analysis.title,
-                labels: analysis.labels,
+            insertPattern.run(
+                'issue_analysis',
+                JSON.stringify({
+                    complexity: analysis.complexity,
+                    category: analysis.category,
+                    languages: analysis.languages,
+                    frameworks: analysis.frameworks
+                }),
+                analysis.confidence / 100,
+                JSON.stringify({
+                    title: analysis.title,
+                    labels: analysis.labels,
                 priority: analysis.priority
-            }),
-            JSON.stringify({
-                agents: analysis.requiredAgents,
-                tools: analysis.requiredTools,
-                duration: analysis.estimatedDuration
-            })
-        );
+                }),
+                JSON.stringify({
+                    agents: analysis.requiredAgents,
+                    tools: analysis.requiredTools,
+                    duration: analysis.estimatedDuration
+                })
+            );
+        } else {
+            // JSON fallback
+            const data = this.readJsonDb();
+            
+            const pattern = {
+                pattern_type: 'issue_analysis',
+                pattern_data: {
+                    complexity: analysis.complexity,
+                    category: analysis.category,
+                    languages: analysis.languages,
+                    frameworks: analysis.frameworks
+                },
+                confidence_score: analysis.confidence / 100,
+                issue_characteristics: {
+                    title: analysis.title,
+                    labels: analysis.labels,
+                    priority: analysis.priority
+                },
+                solution_approach: {
+                    agents: analysis.requiredAgents,
+                    tools: analysis.requiredTools,
+                    duration: analysis.estimatedDuration
+                },
+                created_at: new Date().toISOString()
+            };
+            
+            data.learning_patterns.push(pattern);
+            this.writeJsonDb(data);
+        }
     }
 
     async getHistoricalSuggestions(issueData) {

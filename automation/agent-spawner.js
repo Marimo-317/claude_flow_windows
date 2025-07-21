@@ -4,14 +4,48 @@ const Database = require('better-sqlite3');
 const winston = require('winston');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs-extra');
 
 class AgentSpawner {
     constructor() {
-        this.db = new Database('.hive-mind/automation.db');
+        // Try SQLite, fallback to JSON storage
+        try {
+            this.db = new Database('.hive-mind/automation.db');
+            this.storageType = 'sqlite';
+        } catch (error) {
+            console.log('SQLite not available in AgentSpawner, using JSON fallback');
+            this.db = null;
+            this.storageType = 'json';
+            this.jsonDbPath = '.hive-mind/agent-spawner.json';
+            this.ensureJsonDb();
+        }
         this.logger = this.setupLogger();
         this.activeAgents = new Map();
         this.agentConfig = this.loadAgentConfig();
         this.maxConcurrentAgents = parseInt(process.env.MAX_CONCURRENT_AGENTS) || 5;
+    }
+
+    ensureJsonDb() {
+        if (!fs.existsSync(this.jsonDbPath)) {
+            const defaultDb = {
+                agents: [],
+                performance_data: [],
+                metrics: {
+                    totalAgentsSpawned: 0,
+                    averageSuccessRate: 0,
+                    agentTypes: {}
+                }
+            };
+            fs.writeJsonSync(this.jsonDbPath, defaultDb, { spaces: 2 });
+        }
+    }
+
+    readJsonDb() {
+        return fs.readJsonSync(this.jsonDbPath);
+    }
+
+    writeJsonDb(data) {
+        fs.writeJsonSync(this.jsonDbPath, data, { spaces: 2 });
     }
 
     setupLogger() {

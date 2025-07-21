@@ -14,7 +14,17 @@ require('dotenv').config();
 
 class FullAutomationOrchestrator {
     constructor() {
-        this.db = new Database('.hive-mind/automation.db');
+        // Try SQLite, fallback to JSON storage
+        try {
+            this.db = new Database('.hive-mind/automation.db');
+            this.storageType = 'sqlite';
+        } catch (error) {
+            console.log('SQLite not available, using JSON fallback');
+            this.db = null;
+            this.storageType = 'json';
+            this.jsonDbPath = '.hive-mind/automation.json';
+            this.ensureJsonDb();
+        }
         this.logger = this.setupLogger();
         this.octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
         
@@ -29,7 +39,55 @@ class FullAutomationOrchestrator {
         this.autoResolutionEnabled = process.env.AUTO_RESOLVE_ENABLED === 'true';
         this.learningEnabled = process.env.LEARNING_MODE === 'enabled';
         
+        // Initialize database schema (SQLite or JSON)
+        this.initializeDatabase();
+        
         this.setupShutdownHandlers();
+    }
+
+    initializeDatabase() {
+        if (this.storageType === 'sqlite') {
+            // SQLite database initialization (existing code)
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS automation_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT UNIQUE,
+                    issue_id INTEGER,
+                    status TEXT,
+                    start_time DATETIME,
+                    end_time DATETIME,
+                    metrics TEXT
+                );
+            `);
+        } else {
+            // JSON fallback - already ensured in constructor
+            console.log('Using JSON storage fallback - no database initialization needed');
+        }
+    }
+
+    ensureJsonDb() {
+        if (!fs.existsSync(this.jsonDbPath)) {
+            const defaultDb = {
+                resolutions: [],
+                agents: [],
+                learning_data: [],
+                metrics: {
+                    totalResolutions: 0,
+                    successfulResolutions: 0,
+                    averageResolutionTime: 0,
+                    failureReasons: {}
+                }
+            };
+            fs.writeJsonSync(this.jsonDbPath, defaultDb, { spaces: 2 });
+        }
+    }
+
+    readJsonDb() {
+        return fs.readJsonSync(this.jsonDbPath);
+    }
+
+    writeJsonDb(data) {
+        fs.writeJsonSync(this.jsonDbPath, data, { spaces: 2 });
     }
 
     setupLogger() {
@@ -71,7 +129,9 @@ class FullAutomationOrchestrator {
         }
         
         // Close database connection
-        this.db.close();
+        if (this.db) {
+            this.db.close();
+        }
         
         this.logger.info('Shutdown complete');
         process.exit(0);
@@ -181,43 +241,72 @@ class FullAutomationOrchestrator {
     }
 
     async createSession(sessionId, issueData) {
-        const insertSession = this.db.prepare(`
-            INSERT INTO automation_sessions (
-                session_id, issue_id, status, start_time, metrics
-            ) VALUES (?, ?, ?, ?, ?)
-        `);
-        
-        const issueRecord = this.db.prepare('SELECT id FROM issues WHERE github_id = ?').get(issueData.id);
-        
-        insertSession.run(
-            sessionId,
-            issueRecord?.id,
-            'started',
-            new Date().toISOString(),
-            JSON.stringify({ issue_number: issueData.number, issue_title: issueData.title })
-        );
-        
-        return {
-            sessionId: sessionId,
-            issueId: issueRecord?.id,
-            status: 'started',
-            startTime: Date.now()
-        };
+        if (this.storageType === 'sqlite') {
+            const insertSession = this.db.prepare(`
+                INSERT INTO automation_sessions (
+                    session_id, issue_id, status, start_time, metrics
+                ) VALUES (?, ?, ?, ?, ?)
+            `);
+            
+            const issueRecord = this.db.prepare('SELECT id FROM issues WHERE github_id = ?').get(issueData.id);
+            
+            insertSession.run(
+                sessionId,
+                issueRecord?.id,
+                'started',
+                new Date().toISOString(),
+                JSON.stringify({ issue_number: issueData.number, issue_title: issueData.title })
+            );
+            
+            return {
+                sessionId: sessionId,
+                issueId: issueRecord?.id,
+            };
+        } else {
+            // JSON fallback
+            const data = this.readJsonDb();
+            const session = {
+                session_id: sessionId,
+                issue_id: issueData.id,
+                status: 'started',
+                start_time: new Date().toISOString(),
+                metrics: { issue_number: issueData.number, issue_title: issueData.title }
+            };
+            data.resolutions.push(session);
+            this.writeJsonDb(data);
+            
+            return {
+                sessionId: sessionId,
+                issueId: issueData.id,
+            };
+        }
     }
 
     async updateSession(sessionId, status, additionalData = {}) {
-        const updateSession = this.db.prepare(`
-            UPDATE automation_sessions 
-            SET status = ?, end_time = ?, metrics = ?
-            WHERE session_id = ?
-        `);
-        
-        updateSession.run(
-            status,
-            new Date().toISOString(),
-            JSON.stringify(additionalData),
-            sessionId
-        );
+        if (this.storageType === 'sqlite') {
+            const updateSession = this.db.prepare(`
+                UPDATE automation_sessions 
+                SET status = ?, end_time = ?, metrics = ?
+                WHERE session_id = ?
+            `);
+            
+            updateSession.run(
+                status,
+                new Date().toISOString(),
+                JSON.stringify(additionalData),
+                sessionId
+            );
+        } else {
+            // JSON fallback
+            const data = this.readJsonDb();
+            const sessionIndex = data.resolutions.findIndex(s => s.session_id === sessionId);
+            if (sessionIndex !== -1) {
+                data.resolutions[sessionIndex].status = status;
+                data.resolutions[sessionIndex].end_time = new Date().toISOString();
+                data.resolutions[sessionIndex].additionalData = additionalData;
+                this.writeJsonDb(data);
+            }
+        }
     }
 
     async executeDevelopmentPhase(issueAnalysis, agents, selectedTools, sessionId) {
