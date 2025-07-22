@@ -41,19 +41,17 @@ jobs:
       - name: Analyze Issue Context
         id: analyze
         run: |
-          # Fix Japanese encoding issues by using environment variables and proper quoting
+          # Fix Japanese encoding issues by using simple environment variables
           ISSUE_NUMBER="${{ github.event.issue.number || github.event.comment.issue.number }}"
           ISSUE_TITLE="${{ github.event.issue.title || github.event.comment.issue.title }}"
-          ISSUE_BODY="${{ github.event.issue.body || github.event.comment.issue.body }}"
           REPOSITORY="${{ github.repository }}"
           
-          # Use printf to avoid echo issues with special characters
-          printf "issue_number=%s\n" "$ISSUE_NUMBER" >> $GITHUB_OUTPUT
-          printf "issue_title=%s\n" "$ISSUE_TITLE" >> $GITHUB_OUTPUT  
-          printf "issue_body=%s\n" "$ISSUE_BODY" >> $GITHUB_OUTPUT
-          printf "repository=%s\n" "$REPOSITORY" >> $GITHUB_OUTPUT
+          # Safe output without complex text content
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          echo "issue_title=issue_$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          echo "repository=$REPOSITORY" >> $GITHUB_OUTPUT
           
-          # Debug output (but don't let it fail the step)
+          # Debug output
           echo "✅ Issue context analyzed successfully"
       
       - name: Debug Environment
@@ -71,10 +69,10 @@ jobs:
         id: resolve
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ steps.analyze.outputs.issue_number }}
-          ISSUE_TITLE: ${{ steps.analyze.outputs.issue_title }}
-          ISSUE_BODY: ${{ steps.analyze.outputs.issue_body }}
-          REPOSITORY: ${{ steps.analyze.outputs.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.comment.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title || github.event.comment.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body || github.event.comment.issue.body }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           echo "🚀 Starting automated issue resolution for #$ISSUE_NUMBER"
           echo "📋 Issue: $ISSUE_TITLE"
