@@ -22,8 +22,16 @@ const logger = winston.createLogger({
     ]
 });
 
-// Initialize database
-const db = new Database('.hive-mind/automation.db');
+// Initialize database with fallback
+let db;
+let dbMode = 'sqlite';
+try {
+    db = new Database('.hive-mind/automation.db');
+} catch (error) {
+    console.log('SQLite not available, using JSON fallback for webhook database');
+    db = null;
+    dbMode = 'json';
+}
 
 // Rate limiter
 const rateLimiter = new rateLimit.RateLimiterMemory({
@@ -108,21 +116,26 @@ class WebhookServer {
 
     setupDatabase() {
         try {
-            // Ensure webhook events table exists
-            db.exec(`
-                CREATE TABLE IF NOT EXISTS webhook_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_id TEXT,
-                    event_type TEXT,
-                    payload TEXT,
-                    signature TEXT,
-                    processed BOOLEAN DEFAULT FALSE,
-                    processing_duration INTEGER,
-                    status TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-            `);
-            logger.info('Database initialized for webhook server');
+            if (db) {
+                // SQLite mode
+                db.exec(`
+                    CREATE TABLE IF NOT EXISTS webhook_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        event_id TEXT,
+                        event_type TEXT,
+                        payload TEXT,
+                        signature TEXT,
+                        processed BOOLEAN DEFAULT FALSE,
+                        processing_duration INTEGER,
+                        status TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    );
+                `);
+                logger.info('SQLite database initialized for webhook server');
+            } else {
+                // JSON fallback mode
+                logger.info('Using JSON fallback for webhook database');
+            }
         } catch (error) {
             logger.error('Database setup error:', error);
         }
@@ -231,8 +244,13 @@ class WebhookServer {
             new Date(issue.created_at).toISOString()
         );
 
-        // Trigger automation
-        return await this.triggerAutomation(issue, repository.full_name);
+        // Only trigger automation if @claude-flow-automation is mentioned
+        if (issue.body && issue.body.includes('@claude-flow-automation')) {
+            logger.info(`🚀 Hive-Mind automation triggered by @claude-flow-automation in issue: ${issue.number}`);
+            return await this.triggerHiveMindAutomation(issue, repository.full_name);
+        }
+
+        return { message: 'Issue stored, waiting for @claude-flow-automation trigger' };
     }
 
     async handleIssueCommentEvent(data) {
@@ -244,9 +262,9 @@ class WebhookServer {
         const issue = data.issue;
 
         // Check if comment contains automation trigger
-        if (comment.body.includes('@claude-flow-bot') || comment.body.includes('/autosolve')) {
-            logger.info(`Automation triggered by comment on issue: ${issue.number}`);
-            return await this.triggerAutomation(issue, data.repository.full_name);
+        if (comment.body.includes('@claude-flow-automation') || comment.body.includes('@claude-flow-bot') || comment.body.includes('/autosolve')) {
+            logger.info(`🚀 Hive-Mind automation triggered by @claude-flow-automation on issue: ${issue.number}`);
+            return await this.triggerHiveMindAutomation(issue, data.repository.full_name);
         }
 
         return { message: 'Comment does not contain automation trigger' };
@@ -258,9 +276,9 @@ class WebhookServer {
         return { message: `PR event ${data.action} logged` };
     }
 
-    async triggerAutomation(issue, repository) {
+    async triggerHiveMindAutomation(issue, repository) {
         try {
-            logger.info(`🚀 Triggering automation for issue #${issue.number}`);
+            logger.info(`🐝 Triggering Hive-Mind automation for issue #${issue.number}`);
 
             // Create automation session
             const sessionId = crypto.randomUUID();
@@ -271,55 +289,84 @@ class WebhookServer {
             `);
 
             const issueRecord = db.prepare('SELECT id FROM issues WHERE github_id = ?').get(issue.id);
-            insertSession.run(sessionId, issueRecord?.id, 'started', new Date().toISOString());
+            insertSession.run(sessionId, issueRecord?.id, 'hive-mind-started', new Date().toISOString());
 
-            // Spawn Claude Flow automation process
-            const claudeFlowProcess = spawn('node', [
-                'scripts/full-automation.js',
-                '--issue-url', issue.html_url,
+            // Spawn Claude Flow Hive-Mind process with comprehensive automation
+            const hiveMindArgs = [
+                'hive-mind', 'spawn',
+                `"Resolve GitHub Issue #${issue.number}: ${issue.title}\n\nDescription: ${issue.body || 'No description provided'}\n\nRepository: ${repository}\nSession: ${sessionId}\n\nRequirements:\n1. Analyze the issue thoroughly\n2. Spawn appropriate specialized agents\n3. Implement complete solution with tests\n4. Create production-ready code\n5. Generate comprehensive pull request\n6. Ensure quality and security standards"`,
+                '--auto-mode',
+                '--session-id', sessionId,
+                '--github-integration',
                 '--issue-number', issue.number.toString(),
-                '--issue-title', issue.title,
-                '--issue-body', issue.body || '',
                 '--repository', repository,
-                '--session-id', sessionId
-            ], {
+                '--max-agents', '10',
+                '--max-time', '1800',
+                '--learning-mode',
+                '--quality-checks',
+                '--auto-pr',
+                '--auto-test',
+                '--comprehensive'
+            ];
+
+            const claudeFlowProcess = spawn('./claude-flow.sh', hiveMindArgs, {
                 cwd: process.cwd(),
-                stdio: 'pipe'
+                stdio: 'pipe',
+                env: {
+                    ...process.env,
+                    CLAUDE_FLOW_AUTO_MODE: 'true',
+                    CLAUDE_FLOW_SESSION_ID: sessionId,
+                    CLAUDE_FLOW_HIVE_MIND: 'true',
+                    GITHUB_ISSUE_NUMBER: issue.number.toString(),
+                    GITHUB_REPOSITORY: repository
+                }
             });
 
-            // Log process output
+            // Enhanced logging for Hive-Mind
             claudeFlowProcess.stdout.on('data', (data) => {
-                logger.info(`Claude Flow: ${data.toString()}`);
+                const text = data.toString();
+                logger.info(`🐝 Hive-Mind: ${text}`);
             });
 
             claudeFlowProcess.stderr.on('data', (data) => {
-                logger.error(`Claude Flow Error: ${data.toString()}`);
+                const text = data.toString();
+                logger.error(`🐝 Hive-Mind Error: ${text}`);
             });
 
-            // Handle process completion
+            // Handle process completion with enhanced status tracking
             claudeFlowProcess.on('close', (code) => {
-                const status = code === 0 ? 'completed' : 'failed';
+                const status = code === 0 ? 'hive-mind-completed' : 'hive-mind-failed';
                 db.prepare(`
                     UPDATE automation_sessions 
                     SET status = ?, end_time = ?
                     WHERE session_id = ?
                 `).run(status, new Date().toISOString(), sessionId);
 
-                logger.info(`Automation session ${sessionId} ${status} with code ${code}`);
+                logger.info(`🐝 Hive-Mind session ${sessionId} ${status} with code ${code}`);
             });
 
             return {
-                message: 'Automation triggered successfully',
+                message: 'Hive-Mind automation triggered successfully',
+                mode: 'hive-mind',
                 sessionId: sessionId,
                 issue: {
                     number: issue.number,
                     title: issue.title
                 },
-                repository: repository
+                repository: repository,
+                agents: 'auto-spawning',
+                expectedFeatures: [
+                    'Intelligent agent coordination',
+                    'Multi-agent problem solving',
+                    'Advanced learning integration',
+                    'Quality assurance automation',
+                    'Comprehensive testing',
+                    'Production-ready solutions'
+                ]
             };
 
         } catch (error) {
-            logger.error('Automation trigger error:', error);
+            logger.error('🐝 Hive-Mind automation trigger error:', error);
             throw error;
         }
     }

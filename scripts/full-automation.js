@@ -333,20 +333,29 @@ class FullAutomationOrchestrator {
     async executeClaudeFlowWorkflow(context) {
         const workflowPrompt = this.generateWorkflowPrompt(context);
         
-        // Execute Claude Flow with comprehensive context
+        // Execute Claude Flow Hive-Mind with comprehensive automation
         const claudeFlowArgs = [
             'hive-mind',
             'spawn',
             `"${workflowPrompt}"`,
             '--session-id', context.sessionId,
             '--auto-mode',
+            '--hive-mind-intelligence',
+            '--queen-coordination',
+            '--neural-learning',
             '--tools', context.tools.map(t => t.name).join(','),
             '--workspace', context.workspace,
             '--issue-number', context.issue.number.toString(),
             '--complexity', context.issue.complexity,
             '--category', context.issue.category,
             '--languages', context.issue.languages.join(','),
-            '--max-time', '1800' // 30 minutes
+            '--max-agents', '15',
+            '--max-time', '1800', // 30 minutes
+            '--quality-gates',
+            '--comprehensive-testing',
+            '--security-review',
+            '--performance-optimization',
+            '--learning-feedback'
         ];
         
         return new Promise((resolve, reject) => {

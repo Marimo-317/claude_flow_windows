@@ -10,7 +10,9 @@ on:
 jobs:
   auto-resolve:
     runs-on: ubuntu-latest
-    if: github.event.issue != null || github.event.comment != null
+    if: |
+      (github.event.issue != null && contains(github.event.issue.body, '@claude-flow-automation')) ||
+      (github.event.comment != null && contains(github.event.comment.body, '@claude-flow-automation'))
     permissions:
       issues: write
       pull-requests: write
@@ -112,12 +114,13 @@ jobs:
             if [ "${{ steps.check_pr.outputs.pr_created }}" == "true" ]; then
               gh issue comment ${{ steps.analyze.outputs.issue_number }} --body "✅ **Automated Resolution Completed**
               
-              🤖 Claude Flow has successfully analyzed this issue and created a solution.
+              🐝 Claude Flow Hive-Mind has successfully analyzed this issue and created a solution.
               
               📋 **Resolution Summary:**
-              - Issue analyzed and categorized
-              - Appropriate agents spawned for resolution
-              - Solution implemented and tested
+              - Issue analyzed with AI intelligence
+              - Specialized Hive-Mind agents automatically spawned
+              - Multi-agent coordination for optimal solution
+              - Comprehensive solution implemented and tested
               - Pull Request created: #${{ steps.check_pr.outputs.pr_number }}
               
               🔍 **Next Steps:**
@@ -137,14 +140,15 @@ jobs:
               
               📋 **Status:**
               - Issue analysis: ✅ Completed
-              - Agent spawning: ✅ Completed  
+              - Hive-Mind agents: ✅ Spawned
               - Solution generation: ⚠️ Partial
               - Pull request creation: ❌ Failed
               
               🔍 **Recommended Actions:**
               1. Check the workflow logs for detailed error information
-              2. Manual intervention may be required
-              3. Consider simplifying the issue scope
+              2. Review Hive-Mind agent coordination logs
+              3. Manual intervention may be required
+              4. Consider simplifying the issue scope
               
               ---
               🤖 Generated with [Claude Code](https://claude.ai/code)
