@@ -465,28 +465,82 @@ ${implementation ? `- Files: ${implementation.files.join(', ')}` : '- Handled by
 Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
 
         try {
-            const pr = await this.octokit.rest.pulls.create({
+            // Instead of creating PR, post detailed analysis as issue comment
+            const commentBody = `## 🤖 Automated Analysis Completed
+
+### 📋 Issue Analysis Results
+**Issue**: ${title}
+**Analysis Mode**: ${this.claudeFlowInitialized ? 'Claude Flow Hive-Mind' : 'Fallback Mode'}
+**Timestamp**: ${new Date().toISOString()}
+
+### 🐝 Resolution Summary
+${body.split('### 📋 Solution Summary')[1] ? body.split('### 📋 Solution Summary')[1].split('### 🔧 Implementation')[0] : 'Automated analysis completed'}
+
+### 💡 Implementation Guidance
+${implementation ? `**Recommended Files to Create/Modify:**
+${implementation.files.map(file => `- \`${file}\``).join('\n')}
+
+**Implementation Steps:**
+1. Create the recommended files based on the analysis
+2. Test the solution in your development environment  
+3. Create a pull request when ready` : 'Please refer to the detailed analysis above for implementation guidance'}
+
+### 🔍 Next Steps
+1. Review the analysis and recommendations above
+2. Implement the suggested solution manually
+3. Test thoroughly before deployment
+4. Create pull request when implementation is complete
+
+---
+🤖 **Note**: This is an automated analysis. PR creation is disabled for security - please implement manually.
+
+Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
+
+            await this.octokit.rest.issues.createComment({
                 owner: this.owner,
                 repo: this.repo,
-                title: title,
-                head: branchName,
-                base: 'main',
-                body: body
+                issue_number: this.issueNumber,
+                body: commentBody
             });
 
+            // Add labels to the original issue instead of PR
             await this.octokit.rest.issues.addLabels({
                 owner: this.owner,
                 repo: this.repo,
-                issue_number: pr.data.number,
+                issue_number: this.issueNumber,
                 labels: this.claudeFlowInitialized ? 
-                    ['automated-fix', 'claude-flow-hive-mind'] : 
-                    ['automated-fix', 'fallback-mode']
+                    ['analyzed', 'claude-flow-hive-mind', 'awaiting-implementation'] : 
+                    ['analyzed', 'fallback-mode', 'awaiting-implementation']
             });
 
-            return pr.data;
+            return { type: 'comment', issue_number: this.issueNumber, message: 'Analysis posted as comment' };
         } catch (error) {
-            if (error.status === 422) {
-                const prs = await this.octokit.rest.pulls.list({
+            console.error('❌ Failed to post analysis comment:', error.message);
+            
+            // Fallback: simple comment if detailed comment fails
+            try {
+                await this.octokit.rest.issues.createComment({
+                    owner: this.owner,
+                    repo: this.repo,
+                    issue_number: this.issueNumber,
+                    body: `❌ **Automation Analysis Failed**
+                    
+🤖 The automated analysis encountered an error: ${error.message}
+
+🔍 **Recommended Actions:**
+1. Review the GitHub Actions workflow logs
+2. Check if manual intervention is required
+3. Retry automation with \`@claude-flow-automation\`
+
+---
+Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`
+                });
+            } catch (fallbackError) {
+                console.error('❌ Even fallback comment failed:', fallbackError.message);
+            }
+            
+            throw error;
+        }
                     owner: this.owner,
                     repo: this.repo,
                     head: `${this.owner}:${branchName}`,
