@@ -541,15 +541,6 @@ Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`
             
             throw error;
         }
-                    owner: this.owner,
-                    repo: this.repo,
-                    head: `${this.owner}:${branchName}`,
-                    state: 'open'
-                });
-                if (prs.data.length > 0) return prs.data[0];
-            }
-            throw error;
-        }
     }
 
     async updateIssueWithClaudeFlowSuccess(issueNumber, solution) {
