@@ -9,6 +9,11 @@ const path = require('path');
 
 class ClaudeFlowHybridAutomation {
     constructor() {
+        // Enhanced error handling and validation
+        if (!process.env.GITHUB_TOKEN) {
+            throw new Error('GITHUB_TOKEN environment variable is required');
+        }
+        
         this.octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
         this.owner = process.env.REPOSITORY?.split('/')[0] || 'Marimo-317';
         this.repo = process.env.REPOSITORY?.split('/')[1] || 'claude_flow_windows';
@@ -18,6 +23,17 @@ class ClaudeFlowHybridAutomation {
         
         console.log('🚀 Claude Flow Hybrid Automation Starting...');
         console.log('📋 Arguments:', this.args);
+        console.log('🔑 GitHub Token:', process.env.GITHUB_TOKEN ? `Present (${process.env.GITHUB_TOKEN.length} chars)` : 'Missing');
+        console.log('📂 Repository:', `${this.owner}/${this.repo}`);
+        console.log('📊 Process args:', process.argv);
+        console.log('🌍 Environment variables:', {
+            ISSUE_NUMBER: process.env.ISSUE_NUMBER,
+            ISSUE_TITLE: process.env.ISSUE_TITLE,
+            REPOSITORY: process.env.REPOSITORY,
+            NODE_VERSION: process.version,
+            PLATFORM: process.platform,
+            CWD: process.cwd()
+        });
     }
 
     parseArguments() {
@@ -148,6 +164,17 @@ class ClaudeFlowHybridAutomation {
             const issueBody = this.args['issue-body'] || '';
             
             console.log(`🔍 Processing Issue #${issueNumber}: ${issueTitle}`);
+            
+            // Validate required parameters
+            if (!issueNumber || isNaN(issueNumber)) {
+                throw new Error(`Invalid issue number: ${this.args['issue-number']}`);
+            }
+            
+            if (!this.owner || !this.repo) {
+                throw new Error(`Invalid repository: ${this.owner}/${this.repo}`);
+            }
+            
+            console.log('✅ Parameters validated successfully');
             
             // Step 1: Try to initialize Claude Flow
             const initialized = await this.initializeClaudeFlow();

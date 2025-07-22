@@ -46,6 +46,17 @@ jobs:
           echo "issue_body=${{ github.event.issue.body || github.event.comment.issue.body }}" >> $GITHUB_OUTPUT
           echo "repository=${{ github.repository }}" >> $GITHUB_OUTPUT
       
+      - name: Debug Environment
+        run: |
+          echo "🔍 GitHub Actions Environment Debug"
+          echo "Node version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Working directory: $(pwd)"
+          echo "Repository: ${{ github.repository }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Issue number: ${{ github.event.issue.number || github.event.comment.issue.number }}"
+          ls -la scripts/
+          
       - name: Auto Resolve Issue
         id: resolve
         env:
@@ -57,13 +68,32 @@ jobs:
         run: |
           echo "🚀 Starting automated issue resolution for #$ISSUE_NUMBER"
           echo "📋 Issue: $ISSUE_TITLE"
+          echo "🔧 Repository: $REPOSITORY"
+          echo "🎯 GitHub Token present: $([[ -n "$GITHUB_TOKEN" ]] && echo "Yes" || echo "No")"
           
-          # Run the hybrid automation system (claude-flow with fallback)
+          # Add error handling and detailed logging
+          set -e
+          set -x
+          
+          # Verify script exists and is executable
+          if [ ! -f "scripts/claude-flow-hybrid-automation.js" ]; then
+            echo "❌ ERROR: Hybrid automation script not found!"
+            exit 1
+          fi
+          
+          # Run the hybrid automation system with comprehensive error handling
           timeout 30m node scripts/claude-flow-hybrid-automation.js \
             --issue-number "$ISSUE_NUMBER" \
             --issue-title "$ISSUE_TITLE" \
             --issue-body "$ISSUE_BODY" \
-            --repository "$REPOSITORY"
+            --repository "$REPOSITORY" || {
+            echo "❌ Hybrid automation script failed with exit code $?"
+            echo "📊 Environment variables:"
+            echo "  ISSUE_NUMBER=$ISSUE_NUMBER"
+            echo "  REPOSITORY=$REPOSITORY"
+            echo "  GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+            exit 1
+          }
       
       - name: Run Tests
         if: steps.resolve.conclusion == 'success'
