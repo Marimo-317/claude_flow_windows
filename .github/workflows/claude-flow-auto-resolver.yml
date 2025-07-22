@@ -41,10 +41,20 @@ jobs:
       - name: Analyze Issue Context
         id: analyze
         run: |
-          echo "issue_number=${{ github.event.issue.number || github.event.comment.issue.number }}" >> $GITHUB_OUTPUT
-          echo "issue_title=${{ github.event.issue.title || github.event.comment.issue.title }}" >> $GITHUB_OUTPUT
-          echo "issue_body=${{ github.event.issue.body || github.event.comment.issue.body }}" >> $GITHUB_OUTPUT
-          echo "repository=${{ github.repository }}" >> $GITHUB_OUTPUT
+          # Fix Japanese encoding issues by using environment variables and proper quoting
+          ISSUE_NUMBER="${{ github.event.issue.number || github.event.comment.issue.number }}"
+          ISSUE_TITLE="${{ github.event.issue.title || github.event.comment.issue.title }}"
+          ISSUE_BODY="${{ github.event.issue.body || github.event.comment.issue.body }}"
+          REPOSITORY="${{ github.repository }}"
+          
+          # Use printf to avoid echo issues with special characters
+          printf "issue_number=%s\n" "$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          printf "issue_title=%s\n" "$ISSUE_TITLE" >> $GITHUB_OUTPUT  
+          printf "issue_body=%s\n" "$ISSUE_BODY" >> $GITHUB_OUTPUT
+          printf "repository=%s\n" "$REPOSITORY" >> $GITHUB_OUTPUT
+          
+          # Debug output (but don't let it fail the step)
+          echo "✅ Issue context analyzed successfully"
       
       - name: Debug Environment
         run: |
