@@ -21,8 +21,8 @@ class ClaudeFlowHybridAutomation {
         this.claudeFlowInitialized = false;
         this.initializationAttempted = false;
         
-        // ✅ CRITICAL FIX: Set issueNumber properly
-        this.issueNumber = this.getIssueNumber();
+        // ✅ CRITICAL FIX: Initialize issueNumber after parseArguments
+        this.issueNumber = this.initializeIssueNumber();
         
         console.log('🚀 Claude Flow Hybrid Automation Starting...');
         console.log('📋 Arguments:', this.args);
@@ -37,6 +37,38 @@ class ClaudeFlowHybridAutomation {
             PLATFORM: process.platform,
             CWD: process.cwd()
         });
+        
+        // ✅ CRITICAL FIX: Initialize issue number AFTER methods are defined
+        try {
+            this.issueNumber = this.initializeIssueNumber();
+            console.log(`✅ Issue number successfully initialized: ${this.issueNumber}`);
+        } catch (error) {
+            console.error('❌ Failed to initialize issue number:', error.message);
+            throw error;
+        }
+    }
+
+    // ✅ CRITICAL FIX: Define initializeIssueNumber method right after constructor
+    initializeIssueNumber() {
+        const sources = [
+            this.args['issue-number'],
+            process.env.ISSUE_NUMBER,
+            process.env.GITHUB_ISSUE_NUMBER
+        ];
+        
+        for (const source of sources) {
+            if (source) {
+                const num = parseInt(source);
+                if (!isNaN(num) && num > 0) {
+                    console.log(`✅ Issue number found: ${num} (from: ${source})`);
+                    return num;
+                }
+            }
+        }
+        
+        console.error('❌ CRITICAL: No valid issue number found!');
+        console.error('Available sources:', sources);
+        throw new Error('Issue number is required but not found');
     }
 
     parseArguments() {
@@ -58,6 +90,7 @@ class ClaudeFlowHybridAutomation {
             'repository': args['repository'] || process.env.REPOSITORY
         };
     }
+
 
     async initializeClaudeFlow() {
         if (this.initializationAttempted) {
