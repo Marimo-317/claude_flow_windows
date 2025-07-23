@@ -392,7 +392,7 @@ class ClaudeFlowSimple {
         this.logger.info('✅ Hive-Mind coordination complete');
         this.logger.info(`🎯 Solution confidence: ${Math.round(coordination.confidence * 100)}%`);
         
-        return solution;
+        return coordination;
     }
     
     async executeIndividualAnalysis(agents, analysis) {
@@ -543,7 +543,7 @@ class ClaudeFlowSimple {
             tests: this.generateTestingStrategy(analysis),
             documentation: this.generateDocumentationPlan(analysis),
             timeline: this.estimateTimeline(analysis),
-            quality: this.calculateImplementationQuality(solution, analysis),
+            quality: this.calculateImplementationQuality(coordination, analysis),
             architecture: this.generateArchitecturalGuidance(analysis),
             deployment: this.generateDeploymentStrategy(analysis)
         };
@@ -652,7 +652,7 @@ class ClaudeFlowSimple {
         return baseTime[analysis.complexity] || '3-5 days';
     }
     
-    calculateImplementationQuality(solution, analysis) {
+    calculateImplementationQuality(coordination, analysis) {
         let quality = 0.8; // Base quality score
         
         if (coordination.confidence > 0.9) quality += 0.1;
