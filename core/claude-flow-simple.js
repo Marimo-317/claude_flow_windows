@@ -390,7 +390,7 @@ class ClaudeFlowSimple {
         };
         
         this.logger.info('✅ Hive-Mind coordination complete');
-        this.logger.info(`🎯 Solution confidence: ${Math.round(solution.confidence * 100)}%`);
+        this.logger.info(`🎯 Solution confidence: ${Math.round(coordination.confidence * 100)}%`);
         
         return solution;
     }
@@ -655,7 +655,7 @@ class ClaudeFlowSimple {
     calculateImplementationQuality(solution, analysis) {
         let quality = 0.8; // Base quality score
         
-        if (solution.confidence > 0.9) quality += 0.1;
+        if (coordination.confidence > 0.9) quality += 0.1;
         if (analysis.patterns.length > 3) quality += 0.05;
         if (analysis.affectedAreas.length > 2) quality += 0.03;
         if (analysis.priority === 'urgent') quality += 0.02;
@@ -734,9 +734,9 @@ class ClaudeFlowSimple {
 - **Neural Signature**: \`${analysis.neuralSignature.patternHash}-${analysis.neuralSignature.technicalHash}\`
 
 ### 🤖 AI Agent Deployment
-**Methodology**: ${solution.methodology}
-**Approach**: ${solution.approach}
-**Confidence**: ${Math.round(solution.confidence * 100)}%
+**Methodology**: ${coordination.methodology}
+**Approach**: ${coordination.approach}
+**Confidence**: ${Math.round(coordination.confidence * 100)}%
 
 ### 💡 Advanced Implementation Plan
 ${implementation.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
@@ -764,10 +764,10 @@ ${implementation.documentation.map(doc => `- ${doc}`).join('\n')}
 **Implementation Time**: ${implementation.timeline}
 
 ### 🎯 AI Recommendations
-${solution.recommendations.map(rec => `- ${rec}`).join('\n')}
+${coordination.recommendations.map(rec => `- ${rec}`).join('\n')}
 
 ### 🔄 Alternative Approaches
-${solution.alternatives.map(alt => `- ${alt}`).join('\n')}
+${coordination.alternatives.map(alt => `- ${alt}`).join('\n')}
 
 ### ✅ Next Steps
 1. **Review** this comprehensive AI analysis
