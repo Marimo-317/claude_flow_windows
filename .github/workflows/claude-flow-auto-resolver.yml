@@ -19,6 +19,8 @@ jobs:
       contents: write
       actions: read
       id-token: write
+      repository-projects: write
+      metadata: read
     
     steps:
       - name: Checkout repository
@@ -35,8 +37,8 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci --legacy-peer-deps
-          # Attempt claude-flow installation with fallback handling
-          npm install -g claude-flow@alpha --ignore-scripts --no-optional || echo "Claude Flow installation failed, will use fallback"
+          # Setup for LOCAL Hive-Mind system only - NO external package needed
+          echo "✅ Using LOCAL Hive-Mind v3.0 system - no external dependencies"
       
       - name: Analyze Issue Context
         id: analyze
@@ -83,19 +85,20 @@ jobs:
           set -e
           set -x
           
-          # Verify script exists and is executable
-          if [ ! -f "scripts/claude-flow-hybrid-automation.js" ]; then
-            echo "❌ ERROR: Hybrid automation script not found!"
+          # Verify TRUE AI script exists and is executable
+          if [ ! -f "scripts/claude-flow-true-ai.js" ]; then
+            echo "❌ ERROR: True AI automation script not found!"
             exit 1
           fi
           
-          # Run the hybrid automation system with comprehensive error handling
-          timeout 30m node scripts/claude-flow-hybrid-automation.js \
+          # Run the TRUE AI Hive-Mind system (NO FALLBACK ALLOWED)
+          echo "🐝 STARTING TRUE AI HIVE-MIND v3.0 - NO FALLBACK MODE"
+          timeout 30m node scripts/claude-flow-true-ai.js \
             --issue-number "$ISSUE_NUMBER" \
             --issue-title "$ISSUE_TITLE" \
             --issue-body "$ISSUE_BODY" \
             --repository "$REPOSITORY" || {
-            echo "❌ Hybrid automation script failed with exit code $?"
+            echo "❌ True AI automation script failed with exit code $?"
             echo "📊 Environment variables:"
             echo "  ISSUE_NUMBER=$ISSUE_NUMBER"
             echo "  REPOSITORY=$REPOSITORY"
