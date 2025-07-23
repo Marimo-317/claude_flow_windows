@@ -679,7 +679,7 @@ class ClaudeFlowSimple {
         };
     }
     
-    async publishToGitHub(analysis, solution, implementation) {
+    async publishToGitHub(analysis, coordination, implementation) {
         this.logger.info('📤 Publishing AI analysis to GitHub...');
         
         try {
