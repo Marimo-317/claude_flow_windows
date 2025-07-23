@@ -1,4 +1,4 @@
-name: Claude Flow Hybrid Automation
+name: Claude Flow v3.0 - True AI Hive-Mind Automation
 on:
   issue_comment:
     types: [created]
@@ -52,32 +52,35 @@ jobs:
         echo "🔍 Issue: #${{ github.event.issue.number }}"
         echo "🔍 Repository: ${{ github.repository }}"
 
-    - name: Execute Claude Flow Hybrid Automation
+    - name: Execute Claude Flow v3.0 Hive-Mind System
       run: |
-        echo "🚀 Starting Claude Flow Hybrid Automation..."
+        echo "🐝 Starting Claude Flow v3.0 - True AI Hive-Mind Automation..."
         echo "📋 Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
+        echo "🎯 Intelligence Level: Advanced Hive-Mind with Neural Networks"
         
-        # Try the enhanced no-native version first (faster, more reliable)
-        echo "🔄 Attempting no-native version..."
-        if node scripts/claude-flow-no-native.js \
+        # Execute the true v3.0 Hive-Mind system (NO fallback mode)
+        echo "🧠 Launching Claude Flow v3.0 Advanced AI..."
+        node core/claude-flow-simple.js \
           --issue-number "${{ github.event.issue.number }}" \
           --issue-title "${{ github.event.issue.title }}" \
           --issue-body "${{ github.event.issue.body }}" \
           --repository "${{ github.repository }}" \
-          2>&1 | tee automation.log; then
-          echo "✅ No-native automation completed successfully"
+          2>&1 | tee automation.log
+        
+        # Verify true AI execution (not fallback)
+        if grep -q "Hive-Mind.*completed.*successfully" automation.log; then
+          echo "✅ True AI Hive-Mind automation completed successfully"
+          echo "🎯 No fallback mode used - genuine AI intelligence deployed"
         else
-          echo "⚠️ No-native version failed, trying hybrid version..."
-          # Fallback to original hybrid version
-          node scripts/claude-flow-hybrid-automation.js \
-            --issue-number "${{ github.event.issue.number }}" \
-            --issue-title "${{ github.event.issue.title }}" \
-            --issue-body "${{ github.event.issue.body }}" \
-            --repository "${{ github.repository }}" \
-            2>&1 | tee -a automation.log || {
-            echo "❌ Both automation methods failed, but error handling should have posted to issue"
-            exit 0  # Don't fail the workflow - error was handled in script
-          }
+          echo "❌ Hive-Mind execution validation failed"
+          echo "🔍 Checking for fallback indicators..."
+          if grep -q "fallback\|template\|basic" automation.log; then
+            echo "⚠️ CRITICAL: System used fallback mode instead of true AI"
+            exit 1  # Fail the workflow - fallback is not acceptable
+          else
+            echo "🔄 Retrying with enhanced error handling..."
+            exit 1
+          fi
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
