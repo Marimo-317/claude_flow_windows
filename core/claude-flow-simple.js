@@ -534,11 +534,11 @@ class ClaudeFlowSimple {
         ];
     }
     
-    async generateAdvancedImplementation(solution, analysis) {
+    async generateAdvancedImplementation(coordination, analysis) {
         this.logger.info('💡 Generating advanced implementation plan...');
         
         const implementation = {
-            steps: this.generateImplementationSteps(analysis, solution),
+            steps: this.generateImplementationSteps(analysis, coordination),
             files: this.estimateFilesToModify(analysis),
             tests: this.generateTestingStrategy(analysis),
             documentation: this.generateDocumentationPlan(analysis),
@@ -554,7 +554,7 @@ class ClaudeFlowSimple {
         return implementation;
     }
     
-    generateImplementationSteps(analysis, solution) {
+    generateImplementationSteps(analysis, coordination) {
         const baseSteps = [
             'Perform comprehensive codebase analysis and impact assessment',
             'Design solution architecture following best practices',
