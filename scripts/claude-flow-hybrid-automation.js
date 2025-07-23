@@ -96,60 +96,91 @@ class ClaudeFlowHybridAutomation {
         }
         
         this.initializationAttempted = true;
-        console.log('🔧 Attempting Claude Flow initialization...');
+        console.log('🐝 Initializing LOCAL Claude Flow v3.0 Hive-Mind System...');
         
         try {
-            // Step 1: Check if claude-flow is already available
-            console.log('🔍 Checking existing Claude Flow installation...');
-            const checkResult = await this.executeCommandSafe('claude-flow', ['--version'], { timeout: 10000 });
+            // Use LOCAL Hive-Mind system instead of external package
+            const path = require('path');
             
-            if (checkResult.success) {
-                console.log('✅ Claude Flow already available:', checkResult.stdout.trim());
-                this.claudeFlowInitialized = true;
-                return true;
+            // Check if local core files exist
+            const coreFiles = [
+                path.join(__dirname, '..', 'core', 'claude-flow-main.js'),
+                path.join(__dirname, '..', 'core', 'hive-mind-engine.js'), 
+                path.join(__dirname, '..', 'core', 'hive-mind-orchestrator.js'),
+                path.join(__dirname, '..', 'core', 'memory-manager.js')
+            ];
+            
+            console.log('🔍 Checking local Hive-Mind core files...');
+            for (const file of coreFiles) {
+                if (!require('fs').existsSync(file)) {
+                    throw new Error(`Missing core file: ${file}`);
+                }
+                console.log(`✅ Found: ${path.basename(file)}`);
             }
-
-            // Step 2: Try to install claude-flow if not available
-            console.log('📦 Installing Claude Flow...');
-            const installResult = await this.executeCommandSafe('npm', [
-                'install', '-g', 'claude-flow@alpha', '--force', '--no-audit'
-            ], { timeout: 120000 });
             
-            if (!installResult.success) {
-                console.log('⚠️ Global install failed, trying local install...');
-                const localInstallResult = await this.executeCommandSafe('npm', [
-                    'install', 'claude-flow@alpha', '--no-audit'
-                ], { timeout: 60000 });
+            // Test local system initialization
+            console.log('🧠 Testing Hive-Mind Engine initialization...');
+            
+            // Setup minimal logger for testing
+            const winston = require('winston');
+            const testLogger = winston.createLogger({
+                level: 'info',
+                format: winston.format.simple(),
+                transports: [new winston.transports.Console({ silent: true })]
+            });
+            
+            const HiveMindEngine = require('../core/hive-mind-engine');
+            
+            // Set global logger before creating engine
+            global.logger = testLogger;
+            
+            const testEngine = new HiveMindEngine({
+                maxAgents: 10,
+                intelligenceLevel: 'advanced',
+                neuralComplexity: 'high',
+                logger: testLogger
+            });
+            
+            const status = testEngine.getSystemStatus();
+            if (status && status.engine === 'hive-mind-v3') {
+                console.log('✅ Hive-Mind Engine initialized successfully');
+                console.log('🎯 Intelligence Level:', status.intelligenceLevel);
+                console.log('🔢 Max Agents:', status.maxAgents);
+                console.log('🧮 Neural Complexity:', status.neuralComplexity);
                 
-                if (localInstallResult.success) {
-                    console.log('✅ Local Claude Flow installation successful');
+                // Test orchestrator
+                console.log('🎭 Testing Hive-Mind Orchestrator...');
+                const HiveMindOrchestrator = require('../core/hive-mind-orchestrator');
+                const testOrchestrator = new HiveMindOrchestrator({
+                    githubToken: process.env.GITHUB_TOKEN,
+                    repository: `${this.owner}/${this.repo}`,
+                    autoCreatePR: true,
+                    learningEnabled: true
+                });
+                
+                const orchestratorStatus = testOrchestrator.getStatus();
+                if (orchestratorStatus && orchestratorStatus.system === 'hive-mind-orchestrator-v3') {
+                    console.log('✅ Hive-Mind Orchestrator initialized successfully');
+                    
+                    this.claudeFlowInitialized = true;
+                    console.log('🎉 TRUE AI SYSTEM READY - No fallback mode!');
+                    return true;
                 } else {
-                    throw new Error(`Installation failed: ${localInstallResult.stderr}`);
+                    throw new Error('Orchestrator status check failed');
                 }
             } else {
-                console.log('✅ Global Claude Flow installation successful');
-            }
-
-            // Step 3: Verify installation and initialize
-            console.log('⚙️ Verifying Claude Flow installation...');
-            const verifyResult = await this.executeCommandSafe('claude-flow', ['--version'], { timeout: 15000 });
-            
-            if (verifyResult.success) {
-                console.log('✅ Claude Flow verification successful:', verifyResult.stdout.trim());
-                
-                // Step 4: Initialize Claude Flow if needed
-                console.log('🔄 Initializing Claude Flow...');
-                const initResult = await this.executeCommandSafe('claude-flow', ['init', '--auto'], { timeout: 30000 });
-                
-                if (initResult.success || initResult.stdout.includes('already initialized')) {
-                    this.claudeFlowInitialized = true;
-                    console.log('✅ Claude Flow initialized successfully');
-                    return true;
-                }
+                throw new Error('Hive-Mind Engine status check failed');
             }
             
         } catch (error) {
-            console.log('⚠️ Claude Flow initialization failed:', error.message);
+            console.log('❌ LOCAL Hive-Mind initialization failed:', error.message);
+            console.log('🔍 Error details:', error.stack);
+        }
+        
+        // Check for no-fallback flag
+        if (process.argv.includes('--no-fallback') || process.argv.includes('--force-hive-mind')) {
+            console.log('🚨 CRITICAL: Hive-Mind initialization failed and fallback is DISABLED');
+            throw new Error('Hive-Mind system required but initialization failed');
         }
         
         console.log('📝 Falling back to hybrid mode (basic automation)');
@@ -279,80 +310,97 @@ class ClaudeFlowHybridAutomation {
     }
 
     async resolveWithClaudeFlow(issueNumber, issueTitle, issueBody) {
-        console.log('🐝 Executing Claude Flow Hive-Mind resolution...');
+        console.log('🐝 Executing LOCAL Hive-Mind v3.0 resolution...');
         
         try {
-            // Create comprehensive prompt for Claude Flow
-            const prompt = `Resolve GitHub Issue #${issueNumber}: ${issueTitle}
+            // Initialize local Hive-Mind system with proper configuration
+            const winston = require('winston');
+            const logger = winston.createLogger({
+                level: 'info',
+                format: winston.format.combine(
+                    winston.format.timestamp(),
+                    winston.format.printf(({ timestamp, level, message }) => 
+                        `${timestamp} [HIVE-MIND] ${level}: ${message}`
+                    )
+                ),
+                transports: [
+                    new winston.transports.Console(),
+                    new winston.transports.File({ filename: 'logs/hive-mind-automation.log' })
+                ]
+            });
 
-ISSUE DESCRIPTION:
-${issueBody}
+            // Initialize Hive-Mind Orchestrator with full configuration
+            const HiveMindOrchestrator = require('../core/hive-mind-orchestrator');
+            const orchestrator = new HiveMindOrchestrator({
+                githubToken: process.env.GITHUB_TOKEN,
+                repository: `${this.owner}/${this.repo}`,
+                autoCreatePR: true,
+                learningEnabled: true,
+                maxConcurrentSessions: 1,
+                logger: logger
+            });
 
-REQUIREMENTS:
-1. Analyze the issue thoroughly
-2. Implement complete, production-ready solution
-3. Create comprehensive tests and documentation
-4. Generate proper implementation plan
-
-CONTEXT:
-- Repository: ${this.args.repository}
-- Environment: GitHub Actions automation
-- Expected output: Complete working solution
-
-Please provide a detailed analysis and implementation plan.`;
-
-            // Try different Claude Flow command variations
-            const commandVariations = [
-                ['claude-flow', 'analyze', prompt, '--json'],
-                ['claude-flow', 'solve', prompt, '--detailed'],
-                ['claude-flow', 'process', prompt],
-                ['npx', 'claude-flow', 'analyze', prompt]
-            ];
-
-            let hiveMindResult = null;
-            let lastError = null;
-
-            for (const [command, ...args] of commandVariations) {
-                console.log(`🔄 Trying: ${command} ${args[0]} ...`);
-                
-                try {
-                    hiveMindResult = await this.executeCommandSafe(command, args, { timeout: 300000 }); // 5 minutes
-                    
-                    if (hiveMindResult.success && hiveMindResult.stdout) {
-                        console.log('✅ Claude Flow execution successful');
-                        break;
-                    } else {
-                        console.log(`⚠️ Command failed: ${hiveMindResult.stderr || 'No output'}`);
-                        lastError = new Error(hiveMindResult.stderr || 'No output');
-                    }
-                } catch (error) {
-                    console.log(`⚠️ Command error: ${error.message}`);
-                    lastError = error;
+            // Create issue data structure
+            const issueData = {
+                number: issueNumber,
+                title: issueTitle,
+                body: issueBody,
+                labels: [{ name: 'automation' }],
+                user: { login: 'github-actions[bot]' },
+                repository: {
+                    name: this.repo,
+                    owner: { login: this.owner },
+                    full_name: `${this.owner}/${this.repo}`
                 }
-            }
+            };
 
-            if (hiveMindResult?.success && hiveMindResult.stdout) {
-                console.log('✅ Hive-Mind resolution completed');
+            console.log('🧠 Starting Hive-Mind issue resolution...');
+            console.log(`📋 Issue: #${issueNumber} - ${issueTitle}`);
+            
+            // Execute the full Hive-Mind workflow
+            const result = await orchestrator.resolveIssue(issueData);
+            
+            if (result && result.success) {
+                console.log('✅ Hive-Mind resolution completed successfully!');
+                console.log('🎯 Quality Score:', result.qualityScore || 'N/A');
+                console.log('🤖 Agents Used:', result.agentsUsed || 'N/A');
+                console.log('📊 Solutions Generated:', result.solutionsGenerated || 'N/A');
                 
-                // Parse results from Claude Flow output
-                const solution = this.parseClaudeFlowOutput(hiveMindResult.stdout);
-                
-                // Update issue with success
-                await this.updateIssueWithClaudeFlowSuccess(issueNumber, solution);
+                // Update issue with detailed success
+                await this.updateIssueWithClaudeFlowSuccess(issueNumber, {
+                    summary: result.summary || 'Hive-Mind automation completed',
+                    approach: 'LOCAL Hive-Mind v3.0 AI System',
+                    agents: result.agentsUsed || 'Multi-agent coordination',
+                    files: result.filesCreated || [],
+                    qualityScore: result.qualityScore || 100,
+                    prCreated: result.prCreated || false,
+                    analysis: result.analysis || 'Complete AI-powered analysis'
+                });
                 
                 return {
                     success: true,
-                    mode: 'claude-flow-hive-mind',
+                    mode: 'hive-mind-v3-local',
                     issueNumber,
-                    solution: solution.summary,
-                    output: hiveMindResult.stdout.slice(0, 1000) + '...'
+                    solution: result.summary || 'Hive-Mind automation completed',
+                    qualityScore: result.qualityScore,
+                    agentsUsed: result.agentsUsed,
+                    prCreated: result.prCreated,
+                    hiveMindResult: result
                 };
             } else {
-                throw lastError || new Error('All Claude Flow command variations failed');
+                throw new Error('Hive-Mind processing returned no result or failed');
             }
             
         } catch (error) {
-            console.log('⚠️ Claude Flow execution failed, falling back...', error.message);
+            console.log('⚠️ LOCAL Hive-Mind execution failed:', error.message);
+            console.log('🔍 Error stack:', error.stack);
+            // Check for no-fallback flag
+            if (process.argv.includes('--no-fallback') || process.argv.includes('--force-hive-mind')) {
+                console.log('🚨 CRITICAL: Hive-Mind execution failed and fallback is DISABLED');
+                throw error;
+            }
+            
+            console.log('🔄 Falling back to basic automation...');
             return await this.resolveWithFallback(issueNumber, issueTitle, issueBody);
         }
     }

@@ -40,14 +40,14 @@ class HiveMindEngine extends EventEmitter {
             }
         };
         
-        // Initialize neural pattern recognition
-        this.initializeNeuralNetworks();
+        // Memory persistence (JSON-based, lightweight) - Setup FIRST  
+        this.memoryPath = path.join(process.cwd(), 'hive-mind-memory');
         
-        // Setup logger
+        // Setup logger (needs memoryPath)
         this.logger = this.setupLogger();
         
-        // Memory persistence (JSON-based, lightweight)
-        this.memoryPath = path.join(process.cwd(), 'hive-mind-memory');
+        // Initialize neural pattern recognition
+        this.initializeNeuralNetworks();
         this.ensureMemoryDirectory();
         
         this.logger.info('🐝 Hive-Mind Engine v3.0 initialized - True AI Mode');
