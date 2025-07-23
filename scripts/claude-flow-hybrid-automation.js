@@ -21,6 +21,9 @@ class ClaudeFlowHybridAutomation {
         this.claudeFlowInitialized = false;
         this.initializationAttempted = false;
         
+        // ✅ CRITICAL FIX: Set issueNumber properly
+        this.issueNumber = this.getIssueNumber();
+        
         console.log('🚀 Claude Flow Hybrid Automation Starting...');
         console.log('📋 Arguments:', this.args);
         console.log('🔑 GitHub Token:', process.env.GITHUB_TOKEN ? `Present (${process.env.GITHUB_TOKEN.length} chars)` : 'Missing');
@@ -496,6 +499,11 @@ ${implementation.files.map(file => `- \`${file}\``).join('\n')}
 
 Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
 
+            // ✅ CRITICAL FIX: Validate issue number before API call
+            if (!this.issueNumber || isNaN(this.issueNumber)) {
+                throw new Error(`Invalid issue number: ${this.issueNumber}`);
+            }
+            
             await this.octokit.rest.issues.createComment({
                 owner: this.owner,
                 repo: this.repo,
@@ -503,15 +511,17 @@ Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
                 body: commentBody
             });
 
-            // Add labels to the original issue instead of PR
-            await this.octokit.rest.issues.addLabels({
-                owner: this.owner,
-                repo: this.repo,
-                issue_number: this.issueNumber,
-                labels: this.claudeFlowInitialized ? 
-                    ['analyzed', 'claude-flow-hive-mind', 'awaiting-implementation'] : 
-                    ['analyzed', 'fallback-mode', 'awaiting-implementation']
-            });
+            // Add labels to the original issue instead of PR  
+            if (this.issueNumber && !isNaN(this.issueNumber)) {
+                await this.octokit.rest.issues.addLabels({
+                    owner: this.owner,
+                    repo: this.repo,
+                    issue_number: this.issueNumber,
+                    labels: this.claudeFlowInitialized ? 
+                        ['analyzed', 'claude-flow-hive-mind', 'awaiting-implementation'] : 
+                        ['analyzed', 'fallback-mode', 'awaiting-implementation']
+                });
+            }
 
             return { type: 'comment', issue_number: this.issueNumber, message: 'Analysis posted as comment' };
         } catch (error) {
@@ -519,12 +529,14 @@ Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
             
             // Fallback: simple comment if detailed comment fails
             try {
-                await this.octokit.rest.issues.createComment({
-                    owner: this.owner,
-                    repo: this.repo,
-                    issue_number: this.issueNumber,
-                    body: `❌ **Automation Analysis Failed**
-                    
+                // ✅ CRITICAL FIX: Validate issue number in fallback too
+                if (this.issueNumber && !isNaN(this.issueNumber)) {
+                    await this.octokit.rest.issues.createComment({
+                        owner: this.owner,
+                        repo: this.repo,
+                        issue_number: this.issueNumber,
+                        body: `❌ **Automation Analysis Failed**
+                        
 🤖 The automated analysis encountered an error: ${error.message}
 
 🔍 **Recommended Actions:**
@@ -534,7 +546,8 @@ Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
 
 ---
 Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`
-                });
+                    });
+                }
             } catch (fallbackError) {
                 console.error('❌ Even fallback comment failed:', fallbackError.message);
             }
