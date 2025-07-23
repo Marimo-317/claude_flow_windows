@@ -62,11 +62,17 @@ class ClaudeFlowSimple {
             }
         }
         
+        // Handle issue body from file if provided
+        let issueBody = args['issue-body'] || process.env.ISSUE_BODY;
+        if (args['issue-body-file'] && require('fs').existsSync(args['issue-body-file'])) {
+            issueBody = require('fs').readFileSync(args['issue-body-file'], 'utf-8').trim();
+        }
+        
         // Use environment variables as fallback
         return {
             issueNumber: parseInt(args['issue-number']) || parseInt(process.env.ISSUE_NUMBER),
             issueTitle: args['issue-title'] || process.env.ISSUE_TITLE,
-            issueBody: args['issue-body'] || process.env.ISSUE_BODY,
+            issueBody: issueBody,
             repository: args['repository'] || process.env.REPOSITORY
         };
     }
