@@ -1,0 +1,242 @@
+name: Claude Flow v3.0 - True AI Automation
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to process'
+        required: true
+        type: number
+      force_rebuild:
+        description: 'Force rebuild even if recently processed'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  hive-mind-automation:
+    name: 🐝 Hive-Mind Issue Resolution
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      checks: write
+      
+    environment:
+      name: claude-flow-v3
+      
+    steps:
+      - name: 🚀 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: 🔧 Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org/'
+          
+      - name: 📦 Install Dependencies (Fast)
+        run: |
+          echo "🔄 Installing core dependencies..."
+          npm ci --prefer-offline --no-audit --progress=false
+          echo "✅ Dependencies installed successfully"
+        env:
+          NODE_ENV: production
+          
+      - name: 🛡️ Validate Environment
+        run: |
+          echo "🔍 Environment validation..."
+          echo "Node version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Repository: ${{ github.repository }}"
+          echo "Issue number: ${{ github.event.issue.number || inputs.issue_number }}"
+          echo "Event type: ${{ github.event_name }}"
+          echo "✅ Environment validated"
+          
+      - name: 🧠 Initialize Hive-Mind System
+        run: |
+          echo "🐝 Initializing Claude Flow v3.0 Hive-Mind..."
+          
+          # Create necessary directories
+          mkdir -p logs
+          mkdir -p hive-mind-memory
+          mkdir -p orchestrator-data
+          
+          # Set permissions
+          chmod 755 logs hive-mind-memory orchestrator-data
+          
+          echo "✅ Hive-Mind system initialized"
+          
+      - name: 🎯 Execute Hive-Mind Resolution
+        id: hive_mind
+        run: |
+          echo "🚀 Starting Hive-Mind issue resolution..."
+          
+          # Determine issue number
+          ISSUE_NUM="${{ github.event.issue.number || inputs.issue_number }}"
+          ISSUE_TITLE="${{ github.event.issue.title || 'Manual Trigger' }}"
+          ISSUE_BODY="${{ github.event.issue.body || '' }}"
+          
+          echo "📋 Processing Issue #${ISSUE_NUM}: ${ISSUE_TITLE}"
+          
+          # Execute Claude Flow v3.0
+          node core/claude-flow-main.js \
+            --issue-number="${ISSUE_NUM}" \
+            --issue-title="${ISSUE_TITLE}" \
+            --issue-body="${ISSUE_BODY}" \
+            --priority="high"
+          
+          echo "✅ Hive-Mind resolution completed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          AUTO_CREATE_PR: true
+          LEARNING_ENABLED: true
+          MAX_CONCURRENT_SESSIONS: 3
+          LOG_LEVEL: info
+          NODE_ENV: production
+          
+      - name: 📊 Upload Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-mind-results-${{ github.event.issue.number || inputs.issue_number }}
+          path: |
+            claude-flow-results.json
+            claude-flow-error.json
+            logs/
+            hive-mind-memory/
+            orchestrator-data/
+          retention-days: 30
+          
+      - name: 🧠 Learning Integration
+        if: success()
+        run: |
+          echo "🔄 Integrating learning patterns..."
+          
+          # Update learning database with successful patterns
+          if [ -f "claude-flow-results.json" ]; then
+            echo "📚 Learning patterns updated from successful resolution"
+            # Future: Implement learning pattern extraction
+          fi
+          
+          echo "✅ Learning integration completed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 📈 Performance Metrics
+        if: always()
+        run: |
+          echo "📊 Collecting performance metrics..."
+          
+          # Memory usage
+          echo "Memory usage: $(free -h | grep Mem | awk '{print $3"/"$2}')"
+          
+          # Disk usage
+          echo "Disk usage: $(df -h . | tail -1 | awk '{print $3"/"$2" ("$5")"}')"
+          
+          # Process duration
+          if [ -f "claude-flow-results.json" ]; then
+            DURATION=$(jq -r '.duration_seconds // "unknown"' claude-flow-results.json)
+            echo "Resolution duration: ${DURATION}s"
+          fi
+          
+          echo "✅ Metrics collected"
+          
+      - name: 🔔 Notification Summary
+        if: always()
+        run: |
+          echo "📢 Claude Flow v3.0 Execution Summary"
+          echo "==========================================="
+          echo "Issue: #${{ github.event.issue.number || inputs.issue_number }}"
+          echo "Status: ${{ job.status }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Timestamp: $(date -u)"
+          
+          if [ -f "claude-flow-results.json" ]; then
+            echo "🎯 Results available in artifacts"
+            echo "Quality Score: $(jq -r '.quality_score // "N/A"' claude-flow-results.json)%"
+            echo "Intelligence: $(jq -r '.intelligence_level // "N/A"' claude-flow-results.json)"
+            echo "PR Created: $(jq -r '.pr_created // false' claude-flow-results.json)"
+          fi
+          
+          echo "==========================================="
+          
+  # Parallel job for system health monitoring
+  system-health:
+    name: 🏥 System Health Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: 🚀 Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: 📦 Install Dependencies
+        run: npm ci --prefer-offline --no-audit
+        
+      - name: 🏥 Health Check
+        run: |
+          echo "🔍 Running system health checks..."
+          
+          # Check core files exist
+          echo "📁 Checking core files..."
+          [ -f "core/claude-flow-main.js" ] && echo "✅ Main entry point exists" || echo "❌ Main entry point missing"
+          [ -f "core/hive-mind-engine.js" ] && echo "✅ Hive-Mind engine exists" || echo "❌ Hive-Mind engine missing"
+          [ -f "core/hive-mind-orchestrator.js" ] && echo "✅ Orchestrator exists" || echo "❌ Orchestrator missing"
+          
+          # Test system status
+          echo "🧠 Testing Hive-Mind status..."
+          node core/claude-flow-main.js status
+          
+          echo "✅ System health check completed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          
+  # Cleanup job for maintenance
+  maintenance:
+    name: 🧹 System Maintenance
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.force_rebuild)
+    
+    steps:
+      - name: 🚀 Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: 🧹 Cleanup Old Artifacts
+        run: |
+          echo "🔄 Performing system maintenance..."
+          
+          # Clean up old log files (keep last 10)
+          find logs -name "*.log" -type f -mtime +7 -delete 2>/dev/null || true
+          
+          # Clean up old memory files (keep last 30 days)
+          find hive-mind-memory -name "*.json" -type f -mtime +30 -delete 2>/dev/null || true
+          find orchestrator-data -name "*.json" -type f -mtime +30 -delete 2>/dev/null || true
+          
+          echo "✅ Maintenance completed"
+          
+# Schedule for maintenance (weekly)
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Every Sunday at 2 AM UTC

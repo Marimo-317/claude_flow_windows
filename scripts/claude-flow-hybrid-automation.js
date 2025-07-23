@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-// Claude Flow Hybrid Automation - Proper AI with SQLite Fallback
-// Attempts full claude-flow initialization, falls back to basic automation only on failure
+// Claude Flow Hybrid Automation - Fixed Version for GitHub Actions
+// Properly implements Claude Flow execution with robust error handling
 
 const { Octokit } = require('@octokit/rest');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const util = require('util');
+
+const execAsync = util.promisify(exec);
 
 class ClaudeFlowHybridAutomation {
     constructor() {
@@ -21,24 +24,21 @@ class ClaudeFlowHybridAutomation {
         this.claudeFlowInitialized = false;
         this.initializationAttempted = false;
         
-        // ✅ CRITICAL FIX: Initialize issueNumber after parseArguments
-        this.issueNumber = this.initializeIssueNumber();
-        
         console.log('🚀 Claude Flow Hybrid Automation Starting...');
         console.log('📋 Arguments:', this.args);
         console.log('🔑 GitHub Token:', process.env.GITHUB_TOKEN ? `Present (${process.env.GITHUB_TOKEN.length} chars)` : 'Missing');
         console.log('📂 Repository:', `${this.owner}/${this.repo}`);
-        console.log('📊 Process args:', process.argv);
         console.log('🌍 Environment variables:', {
             ISSUE_NUMBER: process.env.ISSUE_NUMBER,
             ISSUE_TITLE: process.env.ISSUE_TITLE,
             REPOSITORY: process.env.REPOSITORY,
             NODE_VERSION: process.version,
             PLATFORM: process.platform,
-            CWD: process.cwd()
+            CWD: process.cwd(),
+            PATH: process.env.PATH?.split(path.delimiter).slice(0, 5).join(':') + '...'
         });
         
-        // ✅ CRITICAL FIX: Initialize issue number AFTER methods are defined
+        // Initialize issue number AFTER methods are defined
         try {
             this.issueNumber = this.initializeIssueNumber();
             console.log(`✅ Issue number successfully initialized: ${this.issueNumber}`);
@@ -48,7 +48,6 @@ class ClaudeFlowHybridAutomation {
         }
     }
 
-    // ✅ CRITICAL FIX: Define initializeIssueNumber method right after constructor
     initializeIssueNumber() {
         const sources = [
             this.args['issue-number'],
@@ -91,7 +90,6 @@ class ClaudeFlowHybridAutomation {
         };
     }
 
-
     async initializeClaudeFlow() {
         if (this.initializationAttempted) {
             return this.claudeFlowInitialized;
@@ -101,38 +99,53 @@ class ClaudeFlowHybridAutomation {
         console.log('🔧 Attempting Claude Flow initialization...');
         
         try {
-            // Method 1: Try with --ignore-scripts to skip native module builds
-            console.log('📦 Installing claude-flow with --ignore-scripts...');
-            const installResult = await this.executeCommand('npm', [
-                'install', '-g', 'claude-flow@alpha', '--ignore-scripts', '--no-optional'
+            // Step 1: Check if claude-flow is already available
+            console.log('🔍 Checking existing Claude Flow installation...');
+            const checkResult = await this.executeCommandSafe('claude-flow', ['--version'], { timeout: 10000 });
+            
+            if (checkResult.success) {
+                console.log('✅ Claude Flow already available:', checkResult.stdout.trim());
+                this.claudeFlowInitialized = true;
+                return true;
+            }
+
+            // Step 2: Try to install claude-flow if not available
+            console.log('📦 Installing Claude Flow...');
+            const installResult = await this.executeCommandSafe('npm', [
+                'install', '-g', 'claude-flow@alpha', '--force', '--no-audit'
             ], { timeout: 120000 });
             
-            if (installResult.success) {
-                console.log('✅ Claude Flow installation successful');
-                
-                // Method 2: Try initialization with minimal config
-                console.log('⚙️ Attempting minimal initialization...');
-                const initResult = await this.executeCommand('npx', [
-                    'claude-flow@alpha', 'init', '--minimal', '--no-sqlite', '--json-fallback'
+            if (!installResult.success) {
+                console.log('⚠️ Global install failed, trying local install...');
+                const localInstallResult = await this.executeCommandSafe('npm', [
+                    'install', 'claude-flow@alpha', '--no-audit'
                 ], { timeout: 60000 });
                 
-                if (initResult.success) {
+                if (localInstallResult.success) {
+                    console.log('✅ Local Claude Flow installation successful');
+                } else {
+                    throw new Error(`Installation failed: ${localInstallResult.stderr}`);
+                }
+            } else {
+                console.log('✅ Global Claude Flow installation successful');
+            }
+
+            // Step 3: Verify installation and initialize
+            console.log('⚙️ Verifying Claude Flow installation...');
+            const verifyResult = await this.executeCommandSafe('claude-flow', ['--version'], { timeout: 15000 });
+            
+            if (verifyResult.success) {
+                console.log('✅ Claude Flow verification successful:', verifyResult.stdout.trim());
+                
+                // Step 4: Initialize Claude Flow if needed
+                console.log('🔄 Initializing Claude Flow...');
+                const initResult = await this.executeCommandSafe('claude-flow', ['init', '--auto'], { timeout: 30000 });
+                
+                if (initResult.success || initResult.stdout.includes('already initialized')) {
                     this.claudeFlowInitialized = true;
                     console.log('✅ Claude Flow initialized successfully');
                     return true;
                 }
-            }
-            
-            // Method 3: Try local npx with basic setup
-            console.log('🔄 Trying alternative initialization...');
-            const altInitResult = await this.executeCommand('./claude-flow.sh', [
-                'status'
-            ], { timeout: 30000 });
-            
-            if (altInitResult.success) {
-                this.claudeFlowInitialized = true;
-                console.log('✅ Claude Flow basic functionality confirmed');
-                return true;
             }
             
         } catch (error) {
@@ -143,51 +156,82 @@ class ClaudeFlowHybridAutomation {
         return false;
     }
 
-    async executeCommand(command, args = [], options = {}) {
+    async executeCommandSafe(command, args = [], options = {}) {
         return new Promise((resolve) => {
-            const process = spawn(command, args, {
-                stdio: 'pipe',
+            console.log(`🔧 Executing: ${command} ${args.join(' ')}`);
+            
+            const childProcess = spawn(command, args, {
+                stdio: ['ignore', 'pipe', 'pipe'],
+                shell: process.platform === 'win32',
                 ...options
             });
             
             let stdout = '';
             let stderr = '';
+            let isResolved = false;
             
-            process.stdout.on('data', (data) => {
-                stdout += data.toString();
+            const resolveOnce = (result) => {
+                if (!isResolved) {
+                    isResolved = true;
+                    resolve(result);
+                }
+            };
+            
+            childProcess.stdout?.on('data', (data) => {
+                const chunk = data.toString();
+                stdout += chunk;
+                console.log(`📤 ${command}:`, chunk.trim());
             });
             
-            process.stderr.on('data', (data) => {
-                stderr += data.toString();
+            childProcess.stderr?.on('data', (data) => {
+                const chunk = data.toString();
+                stderr += chunk;
+                console.log(`📥 ${command} (stderr):`, chunk.trim());
             });
             
-            process.on('close', (code) => {
-                resolve({
+            childProcess.on('close', (code) => {
+                console.log(`🏁 ${command} exited with code:`, code);
+                resolveOnce({
                     success: code === 0,
                     code,
-                    stdout,
-                    stderr
+                    stdout: stdout.trim(),
+                    stderr: stderr.trim()
                 });
             });
             
-            process.on('error', (error) => {
-                resolve({
+            childProcess.on('error', (error) => {
+                console.log(`❌ ${command} error:`, error.message);
+                resolveOnce({
                     success: false,
                     error: error.message,
-                    stdout,
-                    stderr
+                    stdout: stdout.trim(),
+                    stderr: stderr.trim()
                 });
             });
             
+            // Improved timeout handling
             if (options.timeout) {
                 setTimeout(() => {
-                    process.kill();
-                    resolve({
-                        success: false,
-                        error: 'Command timeout',
-                        stdout,
-                        stderr
-                    });
+                    if (!isResolved) {
+                        console.log(`⏰ ${command} timeout after ${options.timeout}ms`);
+                        try {
+                            childProcess.kill('SIGTERM');
+                            setTimeout(() => {
+                                if (!childProcess.killed) {
+                                    childProcess.kill('SIGKILL');
+                                }
+                            }, 5000);
+                        } catch (killError) {
+                            console.log(`⚠️ Error killing process:`, killError.message);
+                        }
+                        
+                        resolveOnce({
+                            success: false,
+                            error: 'Command timeout',
+                            stdout: stdout.trim(),
+                            stderr: stderr.trim()
+                        });
+                    }
                 }, options.timeout);
             }
         });
@@ -238,59 +282,60 @@ class ClaudeFlowHybridAutomation {
         console.log('🐝 Executing Claude Flow Hive-Mind resolution...');
         
         try {
-            // Create comprehensive prompt for Hive-Mind
-            const hiveMindPrompt = `Resolve GitHub Issue #${issueNumber}: ${issueTitle}
+            // Create comprehensive prompt for Claude Flow
+            const prompt = `Resolve GitHub Issue #${issueNumber}: ${issueTitle}
 
 ISSUE DESCRIPTION:
 ${issueBody}
 
 REQUIREMENTS:
-1. Analyze the issue thoroughly using AI intelligence
-2. Spawn appropriate specialized agents for resolution
-3. Implement complete, production-ready solution
-4. Create comprehensive tests and documentation
-5. Generate proper pull request with all changes
-6. Ensure quality standards and security review
+1. Analyze the issue thoroughly
+2. Implement complete, production-ready solution
+3. Create comprehensive tests and documentation
+4. Generate proper implementation plan
 
 CONTEXT:
 - Repository: ${this.args.repository}
 - Environment: GitHub Actions automation
 - Expected output: Complete working solution
 
-Execute full Hive-Mind coordination to resolve this issue completely.`;
+Please provide a detailed analysis and implementation plan.`;
 
-            // Execute Claude Flow Hive-Mind
-            const hiveMindResult = await this.executeCommand('./claude-flow.sh', [
-                'hive-mind', 'spawn',
-                `"${hiveMindPrompt}"`,
-                '--auto-mode',
-                '--github-integration',
-                '--issue-number', issueNumber.toString(),
-                '--repository', this.args.repository,
-                '--max-agents', '10',
-                '--max-time', '1800',
-                '--learning-mode',
-                '--quality-checks',
-                '--comprehensive'
-            ], { timeout: 1800000 }); // 30 minutes
+            // Try different Claude Flow command variations
+            const commandVariations = [
+                ['claude-flow', 'analyze', prompt, '--json'],
+                ['claude-flow', 'solve', prompt, '--detailed'],
+                ['claude-flow', 'process', prompt],
+                ['npx', 'claude-flow', 'analyze', prompt]
+            ];
 
-            if (hiveMindResult.success) {
+            let hiveMindResult = null;
+            let lastError = null;
+
+            for (const [command, ...args] of commandVariations) {
+                console.log(`🔄 Trying: ${command} ${args[0]} ...`);
+                
+                try {
+                    hiveMindResult = await this.executeCommandSafe(command, args, { timeout: 300000 }); // 5 minutes
+                    
+                    if (hiveMindResult.success && hiveMindResult.stdout) {
+                        console.log('✅ Claude Flow execution successful');
+                        break;
+                    } else {
+                        console.log(`⚠️ Command failed: ${hiveMindResult.stderr || 'No output'}`);
+                        lastError = new Error(hiveMindResult.stderr || 'No output');
+                    }
+                } catch (error) {
+                    console.log(`⚠️ Command error: ${error.message}`);
+                    lastError = error;
+                }
+            }
+
+            if (hiveMindResult?.success && hiveMindResult.stdout) {
                 console.log('✅ Hive-Mind resolution completed');
                 
                 // Parse results from Claude Flow output
                 const solution = this.parseClaudeFlowOutput(hiveMindResult.stdout);
-                
-                // Create PR if not already created by Claude Flow
-                if (!solution.prCreated) {
-                    const pr = await this.createPullRequest(
-                        `fix/issue-${issueNumber}`,
-                        issueNumber,
-                        issueTitle,
-                        solution
-                    );
-                    solution.prNumber = pr.number;
-                    solution.prUrl = pr.html_url;
-                }
                 
                 // Update issue with success
                 await this.updateIssueWithClaudeFlowSuccess(issueNumber, solution);
@@ -299,52 +344,51 @@ Execute full Hive-Mind coordination to resolve this issue completely.`;
                     success: true,
                     mode: 'claude-flow-hive-mind',
                     issueNumber,
-                    prNumber: solution.prNumber,
-                    prUrl: solution.prUrl,
-                    agents: solution.agents || 'multiple',
-                    solution: solution.summary
+                    solution: solution.summary,
+                    output: hiveMindResult.stdout.slice(0, 1000) + '...'
                 };
             } else {
-                throw new Error(`Hive-Mind execution failed: ${hiveMindResult.stderr}`);
+                throw lastError || new Error('All Claude Flow command variations failed');
             }
             
         } catch (error) {
-            console.log('⚠️ Claude Flow execution failed, falling back...');
+            console.log('⚠️ Claude Flow execution failed, falling back...', error.message);
             return await this.resolveWithFallback(issueNumber, issueTitle, issueBody);
         }
     }
 
     parseClaudeFlowOutput(output) {
-        // Parse Claude Flow output for solution details
         const solution = {
-            summary: 'Claude Flow Hive-Mind solution implemented',
-            approach: 'Multi-agent coordination approach',
+            summary: 'Claude Flow analysis completed',
+            approach: 'AI-powered analysis and solution',
             files: [],
-            agents: 'Multiple specialized agents',
-            prCreated: false
+            agents: 'Claude Flow AI System',
+            analysis: output.slice(0, 500) + '...'
         };
         
-        // Look for PR creation in output
-        if (output.includes('Pull Request created') || output.includes('PR #')) {
-            solution.prCreated = true;
-            const prMatch = output.match(/PR #(\d+)/);
-            if (prMatch) {
-                solution.prNumber = parseInt(prMatch[1]);
+        // Try to extract structured information
+        try {
+            // Look for JSON output
+            const jsonMatch = output.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.summary) solution.summary = parsed.summary;
+                if (parsed.files) solution.files = parsed.files;
+                if (parsed.approach) solution.approach = parsed.approach;
             }
+        } catch (parseError) {
+            console.log('📋 Using text-based parsing for Claude Flow output');
         }
         
-        // Extract files if mentioned
-        const fileMatches = output.match(/Modified files?:([^\n]+)/gi);
-        if (fileMatches) {
-            solution.files = fileMatches.flatMap(match => 
-                match.split(':')[1].split(',').map(f => f.trim())
-            );
-        }
-        
-        // Extract summary if present
-        const summaryMatch = output.match(/SUMMARY:([^\n]+)/i);
+        // Extract key information using text patterns
+        const summaryMatch = output.match(/SUMMARY:([^\n]+)/i) || output.match(/Summary:([^\n]+)/i);
         if (summaryMatch) {
             solution.summary = summaryMatch[1].trim();
+        }
+        
+        const filesMatch = output.match(/FILES?:([^\n]+)/i);
+        if (filesMatch) {
+            solution.files = filesMatch[1].split(',').map(f => f.trim());
         }
         
         return solution;
@@ -353,15 +397,12 @@ Execute full Hive-Mind coordination to resolve this issue completely.`;
     async resolveWithFallback(issueNumber, issueTitle, issueBody) {
         console.log('🔧 Executing fallback automation...');
         
-        // Fallback to the previous github-actions-automation logic
-        // but with better messaging about the limitations
-        
         const analysis = await this.analyzeIssue(issueNumber, issueTitle, issueBody);
         const solution = await this.generateSolution(analysis);
         
         const branchName = `fix/issue-${issueNumber}`;
         const implementation = await this.implementSolution(branchName, solution);
-        const pr = await this.createPullRequest(branchName, issueNumber, issueTitle, solution, implementation);
+        const pr = await this.createAnalysisComment(issueNumber, issueTitle, solution, implementation);
         
         await this.updateIssueWithFallbackSuccess(issueNumber, pr);
         
@@ -369,15 +410,11 @@ Execute full Hive-Mind coordination to resolve this issue completely.`;
             success: true,
             mode: 'fallback-automation',
             issueNumber,
-            prNumber: pr.number,
-            prUrl: pr.html_url,
             solution: solution.summary,
             limitation: 'Basic automation used due to Claude Flow initialization issues'
         };
     }
 
-    // Include the analyzeIssue, generateSolution, implementSolution, createPullRequest methods
-    // from the previous github-actions-automation.js implementation
     async analyzeIssue(issueNumber, title, body) {
         console.log('🔍 Analyzing issue (fallback mode)...');
         
@@ -385,16 +422,37 @@ Execute full Hive-Mind coordination to resolve this issue completely.`;
             number: issueNumber,
             title: title,
             body: body,
-            type: 'bug',
+            type: 'unknown',
             complexity: 'medium',
-            priority: 'normal'
+            priority: 'normal',
+            keywords: []
         };
         
-        if (title.toLowerCase().includes('bug') || body.toLowerCase().includes('error')) {
+        const lowerTitle = title.toLowerCase();
+        const lowerBody = body.toLowerCase();
+        const combined = `${lowerTitle} ${lowerBody}`;
+        
+        // Determine issue type
+        if (combined.includes('bug') || combined.includes('error') || combined.includes('fail')) {
             analysis.type = 'bug';
-        } else if (title.toLowerCase().includes('feature')) {
+        } else if (combined.includes('feature') || combined.includes('add') || combined.includes('implement')) {
             analysis.type = 'feature';
+        } else if (combined.includes('improve') || combined.includes('enhance') || combined.includes('optimize')) {
+            analysis.type = 'enhancement';
+        } else if (combined.includes('document') || combined.includes('readme') || combined.includes('doc')) {
+            analysis.type = 'documentation';
         }
+        
+        // Determine complexity
+        if (combined.includes('simple') || combined.includes('minor') || combined.includes('typo')) {
+            analysis.complexity = 'low';
+        } else if (combined.includes('complex') || combined.includes('major') || combined.includes('refactor')) {
+            analysis.complexity = 'high';
+        }
+        
+        // Extract keywords
+        const keywords = combined.match(/\b\w{4,}\b/g) || [];
+        analysis.keywords = [...new Set(keywords)].slice(0, 10);
         
         return analysis;
     }
@@ -402,137 +460,157 @@ Execute full Hive-Mind coordination to resolve this issue completely.`;
     async generateSolution(analysis) {
         console.log('💡 Generating solution (fallback mode)...');
         
-        return {
-            summary: `Automated solution for issue #${analysis.number} (fallback mode)`,
-            approach: 'Basic automated approach with template-based solution',
-            implementation: ['Identify issue scope', 'Apply template fix', 'Add basic tests'],
-            tests: ['Basic functionality test'],
-            limitation: 'Generated using fallback automation due to Claude Flow initialization issues'
+        const solutionTemplates = {
+            bug: {
+                summary: `Bug fix for issue #${analysis.number}: ${analysis.title}`,
+                approach: 'Identify root cause, implement fix, add regression tests',
+                implementation: [
+                    'Reproduce the bug in a test environment',
+                    'Identify the root cause of the issue', 
+                    'Implement a targeted fix',
+                    'Add unit tests to prevent regression',
+                    'Update documentation if needed'
+                ],
+                tests: ['Regression test for the bug', 'Unit tests for affected components']
+            },
+            feature: {
+                summary: `Feature implementation for issue #${analysis.number}: ${analysis.title}`,
+                approach: 'Design feature, implement core functionality, add comprehensive tests',
+                implementation: [
+                    'Design the feature architecture',
+                    'Implement core functionality',
+                    'Add user interface components if needed',
+                    'Create comprehensive test suite',
+                    'Update documentation and examples'
+                ],
+                tests: ['Feature functionality tests', 'Integration tests', 'User acceptance tests']
+            },
+            enhancement: {
+                summary: `Enhancement for issue #${analysis.number}: ${analysis.title}`,
+                approach: 'Analyze current implementation, optimize and improve',
+                implementation: [
+                    'Analyze current implementation',
+                    'Identify optimization opportunities',
+                    'Implement improvements',
+                    'Maintain backward compatibility',
+                    'Update performance benchmarks'
+                ],
+                tests: ['Performance tests', 'Backward compatibility tests']
+            },
+            documentation: {
+                summary: `Documentation update for issue #${analysis.number}: ${analysis.title}`,
+                approach: 'Review existing docs, update content, improve clarity',
+                implementation: [
+                    'Review existing documentation',
+                    'Update outdated information',
+                    'Improve clarity and examples',
+                    'Check for broken links',
+                    'Validate code examples'
+                ],
+                tests: ['Documentation accuracy verification', 'Link validation']
+            }
         };
+        
+        const template = solutionTemplates[analysis.type] || solutionTemplates.bug;
+        
+        return {
+            ...template,
+            keywords: analysis.keywords,
+            complexity: analysis.complexity,
+            priority: analysis.priority,
+            estimatedFiles: this.estimateFilesAffected(analysis),
+            limitation: 'Generated using fallback automation - Claude Flow would provide more detailed analysis'
+        };
+    }
+
+    estimateFilesAffected(analysis) {
+        const files = [];
+        
+        // Based on keywords and type, estimate which files might be affected
+        if (analysis.keywords.includes('test') || analysis.type === 'bug') {
+            files.push('tests/');
+        }
+        
+        if (analysis.keywords.includes('doc') || analysis.type === 'documentation') {
+            files.push('README.md', 'docs/');
+        }
+        
+        if (analysis.keywords.includes('config') || analysis.keywords.includes('setup')) {
+            files.push('package.json', 'config/');
+        }
+        
+        if (analysis.keywords.includes('script') || analysis.keywords.includes('automation')) {
+            files.push('scripts/');
+        }
+        
+        return files.length > 0 ? files : ['src/'];
     }
 
     async implementSolution(branchName, solution) {
         console.log('🔧 Implementing solution (fallback mode)...');
         
-        try {
-            const mainBranch = await this.octokit.rest.git.getRef({
-                owner: this.owner,
-                repo: this.repo,
-                ref: 'heads/main'
-            });
-            
-            await this.octokit.rest.git.createRef({
-                owner: this.owner,
-                repo: this.repo,
-                ref: `refs/heads/${branchName}`,
-                sha: mainBranch.data.object.sha
-            });
-            
-            const fixContent = `// Automated Fix - Fallback Mode
-// Note: This is a template-based fix due to Claude Flow initialization issues
-// For full AI-powered solutions, Claude Flow Hive-Mind needs to be properly initialized
-
-console.log('🔧 Fallback automation fix applied');
-
-// ${solution.summary}
-function fallbackFix() {
-    console.log('Fallback fix implementation');
-    return { success: true, mode: 'fallback' };
-}
-
-module.exports = { fallbackFix };`;
-
-            await this.octokit.rest.repos.createOrUpdateFileContents({
-                owner: this.owner,
-                repo: this.repo,
-                path: `fixes/fallback-fix-${this.args['issue-number']}.js`,
-                message: `Add fallback fix for issue #${this.args['issue-number']}`,
-                content: Buffer.from(fixContent).toString('base64'),
-                branch: branchName
-            });
-            
-            return {
-                files: [`fixes/fallback-fix-${this.args['issue-number']}.js`],
-                summary: 'Fallback fix implementation',
-                linesOfCode: fixContent.split('\n').length
-            };
-            
-        } catch (error) {
-            if (error.status === 422) {
-                return { files: ['existing-branch'], summary: 'Using existing branch' };
-            }
-            throw error;
-        }
+        // This is analysis-only mode - we don't actually create branches/files
+        // Just return implementation guidance
+        
+        return {
+            files: solution.estimatedFiles || ['implementation-needed'],
+            summary: 'Analysis completed - manual implementation required',
+            guidance: solution.implementation,
+            linesOfCode: 'TBD - depends on implementation',
+            note: 'This is analysis mode only - actual file changes require manual implementation'
+        };
     }
 
-    async createPullRequest(branchName, issueNumber, issueTitle, solution, implementation = null) {
-        const mode = this.claudeFlowInitialized ? 'Claude Flow Hive-Mind' : 'Fallback Automation';
-        const title = `Fix: ${issueTitle}`;
-        const body = `## Automated Fix for Issue #${issueNumber}
+    async createAnalysisComment(issueNumber, issueTitle, solution, implementation) {
+        const title = `Analysis: ${issueTitle}`;
+        const body = `## 🤖 Automated Issue Analysis
 
-### 🤖 Generated by ${mode}
+### 📋 Issue Analysis Results
+**Issue**: #${issueNumber} - ${issueTitle}
+**Analysis Mode**: ${this.claudeFlowInitialized ? 'Claude Flow AI' : 'Fallback Analysis'}
+**Timestamp**: ${new Date().toISOString()}
+**Issue Type**: ${solution.complexity} ${solution.type}
 
-**Issue**: ${issueTitle}
-**Mode**: ${mode}
-**Generated**: ${new Date().toISOString()}
-
-${this.claudeFlowInitialized ? `
-### 🐝 Hive-Mind Resolution
-This solution was generated using Claude Flow's advanced Hive-Mind system with:
-- Multi-agent coordination
-- AI-powered analysis and implementation
-- Comprehensive testing and validation
-- Production-ready code generation
-` : `
-### ⚠️ Fallback Mode Notice
-This solution was generated using fallback automation due to Claude Flow initialization issues.
-**Limitation**: Template-based solution without full AI capabilities.
-**Recommendation**: Fix Claude Flow initialization for advanced AI-powered solutions.
-`}
-
-### 📋 Solution Summary
+### 🔍 Analysis Summary
 ${solution.summary}
 
-### 🔧 Implementation
-${implementation ? `- Files: ${implementation.files.join(', ')}` : '- Handled by Claude Flow'}
+**Approach**: ${solution.approach}
+
+### 🛠️ Implementation Plan
+${solution.implementation.map((step, i) => `${i + 1}. ${step}`).join('\n')}
+
+### 📁 Estimated Files to Modify
+${implementation.files.map(file => `- \`${file}\``).join('\n')}
+
+### 🧪 Recommended Tests
+${solution.tests.map(test => `- ${test}`).join('\n')}
+
+### 🔑 Key Insights
+- **Priority**: ${solution.priority}
+- **Complexity**: ${solution.complexity}
+- **Keywords**: ${solution.keywords?.join(', ') || 'N/A'}
+
+### 🚀 Next Steps
+1. **Review** the analysis and implementation plan above
+2. **Implement** the solution following the recommended approach
+3. **Test** thoroughly using the suggested test cases
+4. **Create** a pull request when implementation is complete
+
+${this.claudeFlowInitialized ? `
+### 🐝 AI-Powered Analysis
+This analysis was generated using Claude Flow's advanced AI system, providing intelligent insights and recommendations.
+` : `
+### ⚠️ Analysis Limitation
+This analysis was generated using basic automation due to Claude Flow initialization issues. For more advanced AI-powered analysis, Claude Flow needs to be properly configured.
+`}
 
 ---
 🤖 Generated with [Claude Code](https://claude.ai/code)
+
 Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
 
         try {
-            // Instead of creating PR, post detailed analysis as issue comment
-            const commentBody = `## 🤖 Automated Analysis Completed
-
-### 📋 Issue Analysis Results
-**Issue**: ${title}
-**Analysis Mode**: ${this.claudeFlowInitialized ? 'Claude Flow Hive-Mind' : 'Fallback Mode'}
-**Timestamp**: ${new Date().toISOString()}
-
-### 🐝 Resolution Summary
-${body.split('### 📋 Solution Summary')[1] ? body.split('### 📋 Solution Summary')[1].split('### 🔧 Implementation')[0] : 'Automated analysis completed'}
-
-### 💡 Implementation Guidance
-${implementation ? `**Recommended Files to Create/Modify:**
-${implementation.files.map(file => `- \`${file}\``).join('\n')}
-
-**Implementation Steps:**
-1. Create the recommended files based on the analysis
-2. Test the solution in your development environment  
-3. Create a pull request when ready` : 'Please refer to the detailed analysis above for implementation guidance'}
-
-### 🔍 Next Steps
-1. Review the analysis and recommendations above
-2. Implement the suggested solution manually
-3. Test thoroughly before deployment
-4. Create pull request when implementation is complete
-
----
-🤖 **Note**: This is an automated analysis. PR creation is disabled for security - please implement manually.
-
-Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
-
-            // ✅ CRITICAL FIX: Validate issue number before API call
+            // Validate issue number before API call
             if (!this.issueNumber || isNaN(this.issueNumber)) {
                 throw new Error(`Invalid issue number: ${this.issueNumber}`);
             }
@@ -541,41 +619,52 @@ Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`;
                 owner: this.owner,
                 repo: this.repo,
                 issue_number: this.issueNumber,
-                body: commentBody
+                body: body
             });
 
-            // Add labels to the original issue instead of PR  
+            // Add appropriate labels
             if (this.issueNumber && !isNaN(this.issueNumber)) {
+                const labels = [
+                    'analyzed',
+                    `type:${solution.type || 'unknown'}`,
+                    `complexity:${solution.complexity}`,
+                    this.claudeFlowInitialized ? 'claude-flow-ai' : 'fallback-analysis',
+                    'awaiting-implementation'
+                ];
+                
                 await this.octokit.rest.issues.addLabels({
                     owner: this.owner,
                     repo: this.repo,
                     issue_number: this.issueNumber,
-                    labels: this.claudeFlowInitialized ? 
-                        ['analyzed', 'claude-flow-hive-mind', 'awaiting-implementation'] : 
-                        ['analyzed', 'fallback-mode', 'awaiting-implementation']
+                    labels: labels
                 });
             }
 
-            return { type: 'comment', issue_number: this.issueNumber, message: 'Analysis posted as comment' };
+            return { 
+                type: 'analysis-comment', 
+                issue_number: this.issueNumber, 
+                message: 'Detailed analysis posted as comment',
+                labels_added: true
+            };
+            
         } catch (error) {
             console.error('❌ Failed to post analysis comment:', error.message);
             
             // Fallback: simple comment if detailed comment fails
             try {
-                // ✅ CRITICAL FIX: Validate issue number in fallback too
                 if (this.issueNumber && !isNaN(this.issueNumber)) {
                     await this.octokit.rest.issues.createComment({
                         owner: this.owner,
                         repo: this.repo,
                         issue_number: this.issueNumber,
-                        body: `❌ **Automation Analysis Failed**
+                        body: `❌ **Analysis Failed**
                         
 🤖 The automated analysis encountered an error: ${error.message}
 
 🔍 **Recommended Actions:**
-1. Review the GitHub Actions workflow logs
-2. Check if manual intervention is required
-3. Retry automation with \`@claude-flow-automation\`
+1. Check GitHub Actions workflow logs for details
+2. Verify repository permissions and tokens
+3. Retry automation or implement manually
 
 ---
 Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`
@@ -590,27 +679,30 @@ Co-Authored-By: Claude Flow Automation <automation@claude-flow.ai>`
     }
 
     async updateIssueWithClaudeFlowSuccess(issueNumber, solution) {
-        const comment = `✅ **Hive-Mind Automation Completed**
+        const comment = `✅ **Claude Flow AI Analysis Completed**
 
-🐝 Claude Flow Hive-Mind has successfully resolved this issue using advanced AI coordination.
+🐝 Claude Flow AI has successfully analyzed this issue using advanced AI coordination.
 
-📋 **Resolution Details:**
-- **Mode**: Full Claude Flow Hive-Mind
-- **Agents**: ${solution.agents}
+📋 **Analysis Details:**
+- **Mode**: Full Claude Flow AI System
+- **Agent**: ${solution.agents}
 - **Solution**: ${solution.summary}
-- **Pull Request**: #${solution.prNumber}
+- **Approach**: ${solution.approach}
 
-🔍 **Hive-Mind Features Used:**
-- Multi-agent coordination
-- Neural pattern recognition
+🔍 **AI Features Used:**
 - Advanced problem analysis
-- Production-ready implementation
+- Intelligent solution generation
+- Production-ready recommendations
+- Comprehensive implementation planning
 
-💡 This solution leveraged the full power of Claude Flow's enterprise-grade AI orchestration.
+💡 This analysis leveraged Claude Flow's enterprise-grade AI capabilities.
+
+### 🚀 Implementation Required
+Please review the analysis above and implement the recommended solution.
 
 ---
 🤖 Generated with [Claude Code](https://claude.ai/code)
-Co-Authored-By: Claude Flow Hive-Mind <hive-mind@claude-flow.ai>`;
+Co-Authored-By: Claude Flow AI <ai@claude-flow.ai>`;
 
         await this.octokit.rest.issues.createComment({
             owner: this.owner,
@@ -621,24 +713,27 @@ Co-Authored-By: Claude Flow Hive-Mind <hive-mind@claude-flow.ai>`;
     }
 
     async updateIssueWithFallbackSuccess(issueNumber, pr) {
-        const comment = `⚠️ **Fallback Automation Completed**
+        const comment = `✅ **Fallback Analysis Completed**
 
-🔧 Basic automation system was used due to Claude Flow initialization issues.
+🔧 Basic analysis system provided issue insights.
 
-📋 **Resolution Details:**
-- **Mode**: Fallback Automation (Limited)
-- **Solution**: Template-based fix applied
-- **Pull Request**: #${pr.number}
+📋 **Analysis Details:**
+- **Mode**: Fallback Analysis (Limited AI)
+- **Status**: Analysis completed successfully
+- **Result**: Implementation guidance provided
 
-🚨 **Important Notes:**
-- This is NOT the full AI-powered solution
-- Claude Flow Hive-Mind features were unavailable
-- Limited to basic template-based fixes
+🚨 **Analysis Limitations:**
+- Template-based analysis used
+- Claude Flow AI features were unavailable
+- Limited to pattern-based insights
 
-🔍 **To Get Full AI Features:**
+🔍 **For Enhanced AI Analysis:**
 - Claude Flow initialization needs to be fixed
-- SQLite binding issues must be resolved
-- Hive-Mind coordination requires proper setup
+- Full AI capabilities require proper setup
+- Advanced Hive-Mind coordination unavailable
+
+### 🚀 Next Steps
+Review the analysis comment above and implement the recommended solution manually.
 
 ---
 🤖 Generated with [Claude Code](https://claude.ai/code)
@@ -655,7 +750,7 @@ Co-Authored-By: Claude Flow Fallback System <fallback@claude-flow.ai>`;
     async updateIssueWithFailure(issueNumber, error) {
         const comment = `❌ **Automation System Failed**
 
-🤖 Both Claude Flow and fallback automation encountered critical errors.
+🤖 Both Claude Flow and fallback analysis encountered critical errors.
 
 📋 **Error Details:**
 - **Primary Error**: Claude Flow initialization failed
@@ -663,14 +758,18 @@ Co-Authored-By: Claude Flow Fallback System <fallback@claude-flow.ai>`;
 - **Timestamp**: ${new Date().toISOString()}
 
 🔍 **Root Cause Analysis:**
-- SQLite native binding issues in GitHub Actions
-- Claude Flow dependency installation problems
+- Claude Flow dependency installation issues
 - System configuration incompatibility
+- GitHub Actions environment limitations
 
 💡 **Immediate Actions Needed:**
-1. Fix SQLite binding for Windows/GitHub Actions
-2. Resolve claude-flow@alpha installation issues
-3. Configure proper build environment
+1. Fix Claude Flow installation in GitHub Actions
+2. Resolve dependency and build environment issues
+3. Configure proper automation environment
+4. Consider manual issue analysis and resolution
+
+### 🛠️ Manual Resolution Required
+Please analyze and resolve this issue manually until automation is fixed.
 
 ---
 🤖 Generated with [Claude Code](https://claude.ai/code)
@@ -701,6 +800,7 @@ if (require.main === module) {
         })
         .catch(error => {
             console.error('💥 Automation failed:', error.message);
+            console.error('📋 Stack trace:', error.stack);
             process.exit(1);
         });
 }

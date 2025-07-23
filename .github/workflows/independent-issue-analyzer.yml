@@ -1,0 +1,73 @@
+name: Independent Issue Analyzer
+
+on:
+  issues:
+    types: [opened, edited, labeled, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event.issue != null && contains(github.event.issue.body, '@claude-flow-automation')) ||
+      (github.event.comment != null && contains(github.event.comment.body, '@claude-flow-automation'))
+    permissions:
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install minimal dependencies
+        run: |
+          # Only install the absolute minimum required packages
+          npm install @octokit/rest
+          
+      - name: Debug Environment
+        run: |
+          echo "🔍 Environment Debug"
+          echo "Node: $(node --version)"
+          echo "NPM: $(npm --version)"
+          echo "Repository: ${{ github.repository }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Issue: ${{ github.event.issue.number || github.event.comment.issue.number }}"
+          echo "Working Directory: $(pwd)"
+          ls -la scripts/
+          
+      - name: Run Independent Issue Analysis
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.comment.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title || github.event.comment.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body || github.event.comment.issue.body }}
+        run: |
+          echo "🚀 Starting Independent Issue Analyzer"
+          echo "📋 Issue #$ISSUE_NUMBER: $ISSUE_TITLE"
+          echo "🔧 Repository: $REPOSITORY"
+          
+          # Run the independent analyzer with timeout protection
+          timeout 10m node scripts/independent-issue-analyzer.js \
+            --issue-number "$ISSUE_NUMBER" || {
+            echo "❌ Independent analyzer failed with exit code $?"
+            echo "📊 Environment check:"
+            echo "  ISSUE_NUMBER: $ISSUE_NUMBER"
+            echo "  REPOSITORY: $REPOSITORY" 
+            echo "  GITHUB_TOKEN: $([[ -n "$GITHUB_TOKEN" ]] && echo "Present" || echo "Missing")"
+            exit 1
+          }
+          
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "🧹 Cleanup completed"

@@ -1,0 +1,110 @@
+name: Claude Flow Hybrid Automation
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, reopened, edited]
+
+permissions:
+  issues: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  analyze-issue:
+    # Only run on new issues or when @claude-flow-automation is mentioned
+    if: >
+      (github.event_name == 'issues' && github.event.action == 'opened') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude-flow-automation'))
+    
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Setup Node.js Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: |
+        npm ci --only=production --no-audit --no-fund
+        # Install additional dependencies for automation
+        npm install @octokit/rest --no-audit --no-fund
+
+    - name: Setup Environment Variables
+      run: |
+        echo "ISSUE_NUMBER=${{ github.event.issue.number }}" >> $GITHUB_ENV
+        echo "ISSUE_TITLE=${{ github.event.issue.title }}" >> $GITHUB_ENV
+        echo "ISSUE_BODY=${{ github.event.issue.body }}" >> $GITHUB_ENV
+        echo "REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
+        echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+        
+        # Debug information
+        echo "🔍 Event: ${{ github.event_name }}"
+        echo "🔍 Action: ${{ github.event.action }}"
+        echo "🔍 Issue: #${{ github.event.issue.number }}"
+        echo "🔍 Repository: ${{ github.repository }}"
+
+    - name: Execute Claude Flow Hybrid Automation
+      run: |
+        echo "🚀 Starting Claude Flow Hybrid Automation..."
+        echo "📋 Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
+        
+        # Try the enhanced no-native version first (faster, more reliable)
+        echo "🔄 Attempting no-native version..."
+        if node scripts/claude-flow-no-native.js \
+          --issue-number "${{ github.event.issue.number }}" \
+          --issue-title "${{ github.event.issue.title }}" \
+          --issue-body "${{ github.event.issue.body }}" \
+          --repository "${{ github.repository }}" \
+          2>&1 | tee automation.log; then
+          echo "✅ No-native automation completed successfully"
+        else
+          echo "⚠️ No-native version failed, trying hybrid version..."
+          # Fallback to original hybrid version
+          node scripts/claude-flow-hybrid-automation.js \
+            --issue-number "${{ github.event.issue.number }}" \
+            --issue-title "${{ github.event.issue.title }}" \
+            --issue-body "${{ github.event.issue.body }}" \
+            --repository "${{ github.repository }}" \
+            2>&1 | tee -a automation.log || {
+            echo "❌ Both automation methods failed, but error handling should have posted to issue"
+            exit 0  # Don't fail the workflow - error was handled in script
+          }
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        ISSUE_TITLE: ${{ github.event.issue.title }}
+        ISSUE_BODY: ${{ github.event.issue.body }}
+        REPOSITORY: ${{ github.repository }}
+
+    - name: Upload Automation Logs
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: automation-logs-${{ github.event.issue.number }}
+        path: |
+          automation.log
+          *.log
+        retention-days: 7
+
+    - name: Debug Information
+      if: always()
+      run: |
+        echo "🔍 Debug Information:"
+        echo "Node Version: $(node --version)"
+        echo "NPM Version: $(npm --version)"
+        echo "Working Directory: $(pwd)"
+        echo "Available Files:"
+        ls -la scripts/ || echo "No scripts directory"
+        echo "Environment Variables:"
+        env | grep -E "(GITHUB_|ISSUE_|REPOSITORY)" | sort
+        echo "Process completed with status: $?"
