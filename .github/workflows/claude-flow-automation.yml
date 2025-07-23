@@ -42,9 +42,12 @@ jobs:
       run: |
         echo "ISSUE_NUMBER=${{ github.event.issue.number }}" >> $GITHUB_ENV
         echo "ISSUE_TITLE=${{ github.event.issue.title }}" >> $GITHUB_ENV
-        echo "ISSUE_BODY=${{ github.event.issue.body }}" >> $GITHUB_ENV
         echo "REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
-        echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+        
+        # Handle ISSUE_BODY safely using heredoc
+        cat << 'EOF' > issue_body.txt
+        ${{ github.event.issue.body }}
+        EOF
         
         # Debug information
         echo "🔍 Event: ${{ github.event_name }}"
@@ -63,7 +66,7 @@ jobs:
         node core/claude-flow-simple.js \
           --issue-number "${{ github.event.issue.number }}" \
           --issue-title "${{ github.event.issue.title }}" \
-          --issue-body "${{ github.event.issue.body }}" \
+          --issue-body-file "issue_body.txt" \
           --repository "${{ github.repository }}" \
           2>&1 | tee automation.log
         
@@ -86,7 +89,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ISSUE_NUMBER: ${{ github.event.issue.number }}
         ISSUE_TITLE: ${{ github.event.issue.title }}
-        ISSUE_BODY: ${{ github.event.issue.body }}
         REPOSITORY: ${{ github.repository }}
 
     - name: Upload Automation Logs
